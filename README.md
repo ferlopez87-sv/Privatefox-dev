@@ -64,13 +64,34 @@ layer on a real Mac are still outstanding.
 
 ## Usage
 
-### 1. Try the lock screen (no OS hardening yet)
+### 1. Get the code
+
+All `npm` commands below must be run **from inside the cloned repository**,
+not from your home directory — running `npm install` anywhere without a
+`package.json` fails with `ENOENT: Could not read package.json`.
 
 ```sh
+cd ~                                                        # or wherever you keep projects
+git clone https://github.com/ferlopez87-sv/Privatefox-dev.git
+cd Privatefox-dev                                           # ← important: enter the repo
+```
+
+### 2. Try the lock screen (no OS hardening yet)
+
+```sh
+# from the Privatefox-dev directory:
 npm install
 npm run build
 cd extension
 npm run start        # web-ext run: launches Firefox with the extension loaded
+```
+
+To launch Firefox **Developer Edition** specifically instead of the default
+Firefox:
+
+```sh
+npx web-ext run --source-dir dist --target firefox-desktop \
+  --firefox="/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox-bin"
 ```
 
 On first run you'll get a setup wizard: choose a password, optionally a
@@ -79,7 +100,7 @@ the browser. At this stage the lock works, but the extension can still be
 disabled from `about:addons` and Private Browsing still works — that's
 expected until you complete the hardening steps below.
 
-### 2. Sign the extension (required to enforce policies)
+### 3. Sign the extension (required to enforce policies)
 
 Release-channel Firefox requires AMO signing even for a force-installed,
 unlisted extension:
@@ -93,7 +114,7 @@ npx web-ext sign --source-dir dist --channel unlisted \
 Copy the signed `.xpi` to
 `~/Library/Application Support/Privatefox/privatefox-lock.xpi`.
 
-### 3. Install the native host + enterprise policies
+### 4. Install the native host + enterprise policies
 
 ```sh
 cd native-host
@@ -107,7 +128,7 @@ loads a LaunchAgent that re-installs the policy after Firefox auto-updates
 (macOS wipes it on every update). **Quit Firefox completely and reopen it**
 for the policies to take effect — verify at `about:policies`.
 
-### 4. Email recovery (optional)
+### 5. Email recovery (optional)
 
 Defaults to Mail.app via AppleScript (no stored credentials). To use SMTP
 instead, edit `~/Library/Application Support/Privatefox/host-config.json`
