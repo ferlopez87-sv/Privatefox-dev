@@ -10,13 +10,13 @@
     "install-host": "node dist/install.mjs"
   },
   "dependencies": {
-    "nodemailer": "^6.9.16"
+    "nodemailer": "^9.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "@types/nodemailer": "^6.4.17",
-    "esbuild": "^0.24.2",
+    "@types/nodemailer": "^8.0.1",
+    "esbuild": "^0.25.0",
     "typescript": "^5.5.4",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.10"
   }
 }
