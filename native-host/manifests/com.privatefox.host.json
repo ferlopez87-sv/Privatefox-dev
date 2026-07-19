@@ -1,0 +1,7 @@
+{
+  "name": "com.privatefox.host",
+  "description": "Privatefox Lock companion host (policy install + recovery email)",
+  "path": "__HOST_BINARY_PATH__",
+  "type": "stdio",
+  "allowed_extensions": ["lock@privatefox.local"]
+}

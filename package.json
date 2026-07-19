@@ -1,0 +1,20 @@
+{
+  "name": "privatefox-dev",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Privatefox Lock — password-gated Firefox usage (macOS self-control tool)",
+  "license": "MPL-2.0",
+  "workspaces": [
+    "extension",
+    "native-host"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspace=extension"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.9"
+  }
+}

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Re-installs policies.json after Firefox auto-updates (macOS replaces
+    the whole .app bundle, wiping Contents/Resources/distribution).
+    WatchPaths fires when the bundle changes; the guard script waits for
+    Gatekeeper's first-launch validation before re-copying, then leaves a
+    note that a Firefox restart is needed.
+  -->
+  <key>Label</key>
+  <string>com.privatefox.policyguard</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOST_BINARY_PATH__</string>
+    <string>--policy-guard</string>
+  </array>
+  <key>WatchPaths</key>
+  <array>
+    <string>/Applications/Firefox.app/Contents/MacOS/firefox</string>
+  </array>
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+  <key>StandardErrorPath</key>
+  <string>/tmp/privatefox-policyguard.log</string>
+</dict>
+</plist>

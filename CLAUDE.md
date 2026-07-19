@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Privatefox is a **macOS-only Firefox extension that locks the user out of their own browser behind a password** — a self-control/focus tool for a single person on their own machine (not parental control, not a multi-user/enterprise product). The distinguishing constraint: a WebExtension alone cannot block Private Browsing, cannot block `about:addons`, and cannot prevent its own removal. Firefox Enterprise Policies (`policies.json`) are therefore not an optional hardening layer here — they are the actual enforcement mechanism for those three requirements. The extension's own scripts only ever provide defense-in-depth on top of that.
 
-**Repository status: greenfield.** No extension or native-host code exists yet — this file documents the target architecture and the process to build it, not code that's already there. Keep this file in sync as the project is scaffolded (update commands, layout, and "Phased build order" status as phases land).
+**Repository status: Phases 1–4 implemented** (core lock, options/idle/recovery, native host + policy installer, email recovery). Remaining: Phase 5 (Node SEA packaging, release polish) and real-Mac manual QA of the policy/native-host layer. Keep this file in sync as work lands.
 
 ## Required development workflow
 
@@ -17,7 +17,16 @@ Every task in this repo — from a single-file fix to a full phase — follows f
 3. **Test**: Run the applicable checks before calling anything done — `vitest` for logic in `shared/`, `web-ext lint`, and for anything touching lock-state/overlay/policy behavior, manual verification via `web-ext run`. Changes to policy/native-host behavior additionally require an actual restart against a real Firefox profile — this cannot be automated (see Risks).
 4. **Confirm final product**: State plainly what was verified and how. "Tests pass" is not sufficient on its own for a UI or behavioral change — say what you actually observed happen.
 
-## Repository layout (target structure)
+## Commands
+
+From the repo root: `npm install` (workspaces), `npm test` (vitest in both packages), `npm run build` (both packages), `npm run lint` (web-ext lint on the built extension).
+
+Per package:
+
+- `extension/`: `npm run build` (vite → `dist/`), `npm test` (vitest; single file: `npx vitest run tests/lock-state.test.ts`), `npm run typecheck`, `npm run lint` (requires a prior build — lints `dist/`), `npm run start` (`web-ext run`, needs a real Firefox), `npm run package` (`.xpi` into `web-ext-artifacts/`).
+- `native-host/`: `npm run build` (esbuild → `dist/privatefox-host.cjs` + `dist/install.mjs`), `npm test`, `npm run typecheck`, `npm run install-host` (macOS-only setup CLI; run after build).
+
+## Repository layout
 
 npm-workspaces monorepo, two independently buildable packages plus shared root config:
 
@@ -89,11 +98,11 @@ Mail/SMTP configuration lives only in `~/Library/Application Support/Privatefox/
 - **Vitest** — `extension/src/shared/*` (crypto, lock-state, recovery-code, storage) and `native-host/src/{protocol,policy}` (framing, policy-template generation). No automated e2e: policy/private-browsing/force-install behavior can only be verified against a real Firefox profile with `policies.json` in place and a restart.
 - **Preact** — shared UI layer for the lock screen, options page, and setup wizard.
 
-These are the planned commands; update this section with the real `package.json` scripts as soon as the workspaces are scaffolded.
+The interactive `web-ext run` QA and everything policy/native-host related can only be verified on a real Mac with Firefox — CI and container sessions cover vitest, typecheck, build, and `web-ext lint` only.
 
 ## Phased build order
 
-Each phase is independently demoable before the next one starts. Current status: **not started (Phase 0 — this file only).**
+Each phase is independently demoable before the next one starts. Current status: **Phases 1–4 code-complete with unit tests; Phase 3–4 macOS-side behavior still needs manual QA on a real Mac; Phase 5 not started.**
 
 1. **Phase 1 — Core lock/unlock, no policy hardening.** Newtab-overridden lock screen, content-script overlay, PBKDF2 hash/verify, lock state in storage driven by `runtime.onStartup` plus a manual toolbar-button trigger. No idle detection, no native host, no policies. Fully testable via `web-ext run` alone.
 2. **Phase 2 — Options page + idle detection.** Password change flow, welcome-message editor (no password required to edit the message), configurable idle timeout, recovery-code generation, `nav-guard.ts` defense-in-depth redirects. Still zero OS-level dependencies.

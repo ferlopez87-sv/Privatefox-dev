@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Typecheck extension
+        run: npx tsc --noEmit
+        working-directory: extension
+      - name: Typecheck native host
+        run: npx tsc --noEmit
+        working-directory: native-host
+      - name: Build extension
+        run: npm run build
+        working-directory: extension
+      - name: web-ext lint
+        run: npm run lint
+        working-directory: extension
+      - name: Build native host
+        run: npm run build
+        working-directory: native-host
