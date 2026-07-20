@@ -1,5 +1,6 @@
 import type { HashedSecret } from "./crypto";
 import {
+  DEFAULT_BLOCK_PRIVATE_BROWSING,
   DEFAULT_IDLE_TIMEOUT_MINUTES,
   DEFAULT_WELCOME_MESSAGE,
   STORAGE_SCHEMA_VERSION,
@@ -17,6 +18,11 @@ export interface PrivatefoxState {
   locked: boolean;
   welcomeMessage: string;
   idleTimeoutMinutes: number;
+  /**
+   * User intent to block private/incognito windows. Enforced only by the
+   * policies.json layer (native host); the extension alone cannot block it.
+   */
+  blockPrivateBrowsing: boolean;
   passwordHash: HashedSecret | null;
   recoveryHash: HashedSecret | null;
   /** Address the native host sends recovery emails to (empty = not configured). */
@@ -31,6 +37,7 @@ export const DEFAULT_STATE: PrivatefoxState = {
   locked: false,
   welcomeMessage: DEFAULT_WELCOME_MESSAGE,
   idleTimeoutMinutes: DEFAULT_IDLE_TIMEOUT_MINUTES,
+  blockPrivateBrowsing: DEFAULT_BLOCK_PRIVATE_BROWSING,
   passwordHash: null,
   recoveryHash: null,
   recoveryEmail: "",

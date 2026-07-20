@@ -46,8 +46,9 @@ Key invariants:
 - **Idle lock**: `idle.setDetectionInterval(minutes*60)` re-applied on
   every background wake and on options change (the interval is process
   state Firefox does not persist).
-- **Manual lock**: toolbar action button and buttons in newtab/options all
-  send `lock-now`.
+- **Manual lock**: the toolbar icon opens a status popup (`action.default_popup`,
+  so `action.onClicked` never fires); its "Lock now" button and the buttons in
+  newtab/options all send `lock-now`.
 - **Lock before setup is a no-op** — otherwise a fresh install with no
   password would soft-brick the browser.
 
@@ -66,9 +67,13 @@ Key invariants:
 ```
 
 written to `Firefox.app/Contents/Resources/distribution/policies.json`.
-Effective only after full restart; wiped by every Firefox update (the
-`com.privatefox.policyguard` LaunchAgent re-installs it, with a grace
-delay so Gatekeeper's post-update validation isn't disturbed).
+`DisablePrivateBrowsing` is conditional: the extension's `blockPrivateBrowsing`
+preference (Options → Protection) rides along on the `install-policy` native
+command, and `buildPolicies` omits the key when it is off. `BlockAboutAddons`
+and the force-install are always present. Effective only after full restart;
+wiped by every Firefox update (the `com.privatefox.policyguard` LaunchAgent
+re-installs it, with a grace delay so Gatekeeper's post-update validation
+isn't disturbed).
 
 The `.xpi` must be AMO-signed (unlisted channel) — Release Firefox
 enforces signatures even for force-installed extensions.

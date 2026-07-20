@@ -64,3 +64,28 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 section { margin-bottom: 1.5rem; }
 label { display: block; font-size: 0.9rem; margin: 0.75rem 0 0.25rem; opacity: 0.85; }
+
+/* Toolbar popup */
+main.popup { width: 19rem; max-width: 19rem; margin: 0; padding: 1.25rem; }
+main.popup h1 { font-size: 1.15rem; }
+.status { display: flex; align-items: center; gap: 0.75rem; margin: 0.75rem 0 1rem; }
+.status strong { font-size: 1.05rem; }
+.status p { margin: 0.15rem 0 0; }
+.dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; flex: none; }
+.dot.locked { background: #ff9aa2; box-shadow: 0 0 0 4px rgba(255, 154, 162, 0.18); }
+.dot.unlocked { background: #9aff9a; box-shadow: 0 0 0 4px rgba(154, 255, 154, 0.18); }
+.facts { list-style: none; padding: 0; margin: 0 0 1.25rem; }
+.facts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #2b2a33;
+  font-size: 0.9rem;
+}
+.facts li span:first-child { opacity: 0.7; }
+
+/* Checkbox rows (options "Protection" section) */
+.toggle { display: flex; align-items: flex-start; gap: 0.6rem; margin: 0.5rem 0; cursor: pointer; }
+.toggle input { width: auto; margin-top: 0.2rem; }
+.toggle span { font-size: 0.95rem; }

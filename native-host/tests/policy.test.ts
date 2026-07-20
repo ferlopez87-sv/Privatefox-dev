@@ -26,6 +26,27 @@ describe("policies template", () => {
     expect(ext["updates_disabled"]).toBe(true);
   });
 
+  it("omits DisablePrivateBrowsing when disablePrivateBrowsing is false", () => {
+    const policies = buildPolicies("/Users/me/pf.xpi", {
+      disablePrivateBrowsing: false,
+    }) as { policies: Record<string, unknown> };
+    expect("DisablePrivateBrowsing" in policies.policies).toBe(false);
+    // The other enforcement policies are unaffected.
+    expect(policies.policies["BlockAboutAddons"]).toBe(true);
+    expect(policies.policies["ExtensionSettings"]).toBeDefined();
+  });
+
+  it("includes DisablePrivateBrowsing by default and when explicitly true", () => {
+    const def = buildPolicies("/Users/me/pf.xpi") as {
+      policies: Record<string, unknown>;
+    };
+    const on = buildPolicies("/Users/me/pf.xpi", {
+      disablePrivateBrowsing: true,
+    }) as { policies: Record<string, unknown> };
+    expect(def.policies["DisablePrivateBrowsing"]).toBe(true);
+    expect(on.policies["DisablePrivateBrowsing"]).toBe(true);
+  });
+
   it("rejects relative xpi paths", () => {
     expect(() => buildPolicies("relative/pf.xpi")).toThrow(/absolute/);
   });

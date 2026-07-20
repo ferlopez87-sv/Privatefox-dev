@@ -70,6 +70,51 @@ function GeneralSettings(props: {
   );
 }
 
+/**
+ * Protection toggles that map to Firefox Enterprise Policies. These cannot be
+ * enforced by the extension alone — they take effect only once the Privatefox
+ * native host has (re)written policies.json and Firefox has been restarted.
+ */
+function ProtectionSettings(props: { blockPrivateBrowsing: boolean }) {
+  const [blocked, setBlocked] = useState(props.blockPrivateBrowsing);
+  const [status, setStatus] = useState("");
+
+  useEffect(
+    () => setBlocked(props.blockPrivateBrowsing),
+    [props.blockPrivateBrowsing],
+  );
+
+  const toggle = async (value: boolean) => {
+    setBlocked(value);
+    await patchState({ blockPrivateBrowsing: value });
+    setStatus("Saved.");
+    setTimeout(() => setStatus(""), 2000);
+  };
+
+  return (
+    <section>
+      <h2>Protection</h2>
+      <label class="toggle">
+        <input
+          type="checkbox"
+          checked={blocked}
+          onChange={(e) =>
+            void toggle((e.target as HTMLInputElement).checked)
+          }
+        />
+        <span>Block private / incognito windows</span>
+      </label>
+      <p class="hint">
+        Enforced by Firefox enterprise policies, not the extension itself.
+        Applies after the Privatefox native host is installed and Firefox is
+        restarted (see docs/SETUP.md). Until then this only records your
+        preference.
+      </p>
+      <div class="success">{status}</div>
+    </section>
+  );
+}
+
 /** Password create/change: always goes through the background router. */
 function PasswordSettings(props: { hasPassword: boolean }) {
   const [current, setCurrent] = useState("");
@@ -180,6 +225,7 @@ function App() {
         idleTimeoutMinutes={state.idleTimeoutMinutes}
         recoveryEmail={state.recoveryEmail}
       />
+      <ProtectionSettings blockPrivateBrowsing={state.blockPrivateBrowsing} />
       <PasswordSettings hasPassword={state.passwordHash !== null} />
       <section>
         <h2>Lock</h2>

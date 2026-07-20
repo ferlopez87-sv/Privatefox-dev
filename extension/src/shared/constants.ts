@@ -5,6 +5,13 @@ export const DEFAULT_WELCOME_MESSAGE =
 
 export const DEFAULT_IDLE_TIMEOUT_MINUTES = 10;
 
+/**
+ * Whether private/incognito windows should be blocked. A WebExtension cannot
+ * enforce this itself — it is applied by the policies.json layer (native host,
+ * Phase 3). This is only the stored user intent the policy is built from.
+ */
+export const DEFAULT_BLOCK_PRIVATE_BROWSING = true;
+
 /** Minimum idle detection interval supported by browser.idle (seconds). */
 export const MIN_IDLE_DETECTION_SECONDS = 15;
 

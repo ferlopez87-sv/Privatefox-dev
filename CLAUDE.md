@@ -45,7 +45,8 @@ Privatefox-dev/
 │   │   ├── background/          # index.ts, lock-state.ts, idle-monitor.ts, nav-guard.ts, native-bridge.ts, router.ts
 │   │   ├── content/              # overlay.ts (content script entry), overlay-ui.ts (closed ShadowRoot UI)
 │   │   ├── newtab/               # chrome_url_overrides.newtab target — the lock/welcome screen
-│   │   ├── options/              # welcome-message editor, password set/change, idle timeout, recovery code
+│   │   ├── popup/                # action.default_popup — toolbar status card + Lock now / Preferences
+│   │   ├── options/              # welcome-message editor, password set/change, idle timeout, recovery, block-private-browsing toggle
 │   │   ├── setup/                 # first-run onboarding: force password creation + one-time recovery code display
 │   │   ├── shared/                # crypto.ts, storage.ts, recovery-code.ts, protocol.ts, constants.ts
 │   │   └── ui/                    # Preact components shared by lock/options/setup screens
@@ -104,7 +105,7 @@ The interactive `web-ext run` QA and everything policy/native-host related can o
 
 Each phase is independently demoable before the next one starts. Current status: **Phases 1–4 code-complete with unit tests; Phase 3–4 macOS-side behavior still needs manual QA on a real Mac; Phase 5 not started.**
 
-1. **Phase 1 — Core lock/unlock, no policy hardening.** Newtab-overridden lock screen, content-script overlay, PBKDF2 hash/verify, lock state in storage driven by `runtime.onStartup` plus a manual toolbar-button trigger. No idle detection, no native host, no policies. Fully testable via `web-ext run` alone.
+1. **Phase 1 — Core lock/unlock, no policy hardening.** Newtab-overridden lock screen, content-script overlay, PBKDF2 hash/verify, lock state in storage driven by `runtime.onStartup` plus a manual trigger from the toolbar popup's "Lock now" button (the toolbar icon opens a status popup — `action.default_popup` — so `action.onClicked` never fires; manual lock is a `lock-now` runtime message). No idle detection, no native host, no policies. Fully testable via `web-ext run` alone.
 2. **Phase 2 — Options page + idle detection.** Password change flow, welcome-message editor (no password required to edit the message), configurable idle timeout, recovery-code generation, `nav-guard.ts` defense-in-depth redirects. Still zero OS-level dependencies.
 3. **Phase 3 — Native messaging host + policies.json installer.** `install-policy` command, AMO unlisted signing, LaunchAgent for post-update policy re-install. This is the phase where removal-prevention, Private Browsing blocking, and `about:addons` blocking actually take effect — requires a full Firefox restart to verify.
 4. **Phase 4 — Email recovery.** `send-recovery-email` command (Mail.app path first, SMTP fallback second), `host-config.json` handling, options-page and setup-wizard UI for triggering it.

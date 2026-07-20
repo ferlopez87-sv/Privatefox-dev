@@ -37,7 +37,8 @@ export function getManifest(): chrome.runtime.ManifestV3 {
       open_in_tab: true,
     },
     action: {
-      default_title: "Lock Privatefox now",
+      default_title: "Privatefox Lock",
+      default_popup: "src/popup/index.html",
     },
     icons: {
       "48": "icons/48.png",

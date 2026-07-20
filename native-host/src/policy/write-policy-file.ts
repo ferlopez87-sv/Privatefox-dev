@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildPolicies } from "./policies-template";
+import { buildPolicies, type PolicyOptions } from "./policies-template";
 
 export const FIREFOX_APP = "/Applications/Firefox.app";
 
@@ -21,6 +21,7 @@ export interface WritePolicyResult {
 export function writePolicyFile(
   xpiPath: string,
   firefoxApp: string = FIREFOX_APP,
+  options: PolicyOptions = {},
 ): WritePolicyResult {
   if (!existsSync(firefoxApp)) {
     throw new Error(`Firefox not found at ${firefoxApp}`);
@@ -28,6 +29,9 @@ export function writePolicyFile(
   const dir = policiesDir(firefoxApp);
   mkdirSync(dir, { recursive: true });
   const path = join(dir, "policies.json");
-  writeFileSync(path, JSON.stringify(buildPolicies(xpiPath), null, 2) + "\n");
+  writeFileSync(
+    path,
+    JSON.stringify(buildPolicies(xpiPath, options), null, 2) + "\n",
+  );
   return { path };
 }

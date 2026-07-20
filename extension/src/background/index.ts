@@ -20,10 +20,9 @@ browser.runtime.onStartup.addListener(() => {
   void lock();
 });
 
-// Toolbar button = manual lock.
-browser.action.onClicked.addListener(() => {
-  void lock();
-});
+// The toolbar button opens a status popup (action.default_popup); with a
+// popup set, action.onClicked never fires, so manual locking is driven from
+// the popup's "Lock now" button via the "lock-now" runtime message instead.
 
 // First install: open the setup wizard so a password gets created.
 browser.runtime.onInstalled.addListener((details) => {

@@ -29,7 +29,7 @@ export type RuntimeResponse =
 // ---- Native messaging commands (background -> native host)
 
 export type NativeCommand =
-  | { command: "install-policy"; xpiPath?: string }
+  | { command: "install-policy"; xpiPath?: string; disablePrivateBrowsing?: boolean }
   | {
       command: "send-recovery-email";
       to: string;
