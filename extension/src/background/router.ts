@@ -3,8 +3,10 @@ import { getState, setState } from "../shared/storage";
 import { EMAIL_CODE_TTL_MINUTES } from "../shared/constants";
 import {
   completeSetup,
+  grantAddonsPass,
   issueEmailCode,
   lock,
+  revokeAddonsPass,
   setPassword,
   unlockWithEmailCode,
   unlockWithPassword,
@@ -57,6 +59,15 @@ async function handle(request: RuntimeRequest): Promise<RuntimeResponse> {
     }
     case "lock-now": {
       await lock();
+      return { ok: true, locked: (await getState()).locked };
+    }
+    case "addons-access-attempt": {
+      const ok = await grantAddonsPass(request.password);
+      if (!ok) return { ok: false, error: "Incorrect password." };
+      return { ok: true, locked: (await getState()).locked };
+    }
+    case "revoke-addons-pass": {
+      await revokeAddonsPass();
       return { ok: true, locked: (await getState()).locked };
     }
     case "set-password": {

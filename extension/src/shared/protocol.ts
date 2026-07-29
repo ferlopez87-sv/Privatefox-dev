@@ -14,6 +14,9 @@ export type RuntimeRequest =
   | { kind: "email-code-attempt"; code: string }
   | { kind: "request-email-code" }
   | { kind: "lock-now" }
+  /** Password check that grants temporary access to about:addons. */
+  | { kind: "addons-access-attempt"; password: string }
+  | { kind: "revoke-addons-pass" }
   | {
       kind: "set-password";
       currentPassword: string | null;
@@ -29,7 +32,12 @@ export type RuntimeResponse =
 // ---- Native messaging commands (background -> native host)
 
 export type NativeCommand =
-  | { command: "install-policy"; xpiPath?: string; disablePrivateBrowsing?: boolean }
+  | {
+      command: "install-policy";
+      xpiPath?: string;
+      disablePrivateBrowsing?: boolean;
+      blockAboutAddons?: boolean;
+    }
   | {
       command: "send-recovery-email";
       to: string;

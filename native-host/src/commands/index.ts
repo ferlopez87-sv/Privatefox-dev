@@ -6,7 +6,10 @@ export async function dispatch(message: unknown): Promise<NativeResult> {
   const cmd = message as NativeCommand;
   switch (cmd?.command) {
     case "install-policy":
-      return installPolicy(cmd.xpiPath, cmd.disablePrivateBrowsing);
+      return installPolicy(cmd.xpiPath, {
+        disablePrivateBrowsing: cmd.disablePrivateBrowsing,
+        blockAboutAddons: cmd.blockAboutAddons,
+      });
     case "send-recovery-email":
       return sendRecoveryEmail(cmd.to, cmd.code, cmd.expiresMinutes);
     default:

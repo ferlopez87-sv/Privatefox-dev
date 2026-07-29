@@ -3,12 +3,13 @@ import { existsSync } from "node:fs";
 import type { NativeResult } from "../protocol";
 import { APP_SUPPORT_DIR } from "../config";
 import { writePolicyFile } from "../policy/write-policy-file";
+import type { PolicyOptions } from "../policy/policies-template";
 
 const DEFAULT_XPI = join(APP_SUPPORT_DIR, "privatefox-lock.xpi");
 
 export function installPolicy(
   xpiPath?: string,
-  disablePrivateBrowsing = true,
+  options: PolicyOptions = {},
 ): NativeResult {
   const xpi = xpiPath ?? DEFAULT_XPI;
   if (!existsSync(xpi)) {
@@ -20,7 +21,7 @@ export function installPolicy(
     };
   }
   try {
-    const { path } = writePolicyFile(xpi, undefined, { disablePrivateBrowsing });
+    const { path } = writePolicyFile(xpi, undefined, options);
     return {
       ok: true,
       detail: `Wrote ${path}. Restart Firefox for policies to take effect.`,

@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   completeSetup,
+  grantAddonsPass,
+  hasValidAddonsPass,
   issueEmailCode,
   lock,
+  revokeAddonsPass,
   setPassword,
   unlockWithEmailCode,
   unlockWithPassword,
@@ -83,6 +86,49 @@ describe("lock state machine", () => {
   it("rejects short passwords", async () => {
     await completeSetup("original");
     expect((await setPassword("original", "abc")).ok).toBe(false);
+  });
+
+  it("about:addons pass requires the password and expires", async () => {
+    await completeSetup("hunter22");
+    expect(await hasValidAddonsPass()).toBe(false);
+
+    expect(await grantAddonsPass("wrong")).toBe(false);
+    expect(await hasValidAddonsPass()).toBe(false);
+
+    expect(await grantAddonsPass("hunter22")).toBe(true);
+    expect(await hasValidAddonsPass()).toBe(true);
+
+    // Expires after its TTL (5 minutes).
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 6 * 60_000);
+    expect(await hasValidAddonsPass()).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("locking revokes an outstanding about:addons pass", async () => {
+    await completeSetup("hunter22");
+    expect(await grantAddonsPass("hunter22")).toBe(true);
+    expect(await hasValidAddonsPass()).toBe(true);
+
+    await lock();
+    expect(await hasValidAddonsPass()).toBe(false);
+    expect((await getState()).addonsPassUntil).toBeNull();
+  });
+
+  it("revokes the about:addons pass on demand", async () => {
+    await completeSetup("hunter22");
+    await grantAddonsPass("hunter22");
+    await revokeAddonsPass();
+    expect(await hasValidAddonsPass()).toBe(false);
+  });
+
+  it("grants no about:addons pass when the password was cleared by recovery", async () => {
+    const code = await completeSetup("hunter22");
+    await lock();
+    await unlockWithRecoveryCode(code);
+    // passwordHash is null until a new password is set — nothing to verify.
+    expect(await grantAddonsPass("hunter22")).toBe(false);
+    expect(await hasValidAddonsPass()).toBe(false);
   });
 
   it("email codes are one-time and expire", async () => {

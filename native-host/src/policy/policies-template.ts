@@ -6,6 +6,12 @@ export interface PolicyOptions {
    * extension's blockPrivateBrowsing preference via the install-policy command.
    */
   disablePrivateBrowsing?: boolean;
+  /**
+   * Include BlockAboutAddons. Defaults to true. When false, about:addons
+   * stays reachable and the extension's password gate (nav-guard) is what
+   * protects it — a deliberate trade of hard blocking for usability.
+   */
+  blockAboutAddons?: boolean;
 }
 
 /**
@@ -25,7 +31,7 @@ export function buildPolicies(
   if (!xpiPath.startsWith("/")) {
     throw new Error(`xpiPath must be absolute, got: ${xpiPath}`);
   }
-  const { disablePrivateBrowsing = true } = options;
+  const { disablePrivateBrowsing = true, blockAboutAddons = true } = options;
   return {
     policies: {
       ExtensionSettings: {
@@ -36,7 +42,7 @@ export function buildPolicies(
         },
       },
       ...(disablePrivateBrowsing ? { DisablePrivateBrowsing: true } : {}),
-      BlockAboutAddons: true,
+      ...(blockAboutAddons ? { BlockAboutAddons: true } : {}),
     },
   };
 }

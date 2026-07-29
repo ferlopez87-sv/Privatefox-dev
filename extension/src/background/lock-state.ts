@@ -5,14 +5,47 @@ import {
   normalizeRecoveryCode,
 } from "../shared/recovery-code";
 import { getState, setState } from "../shared/storage";
-import { EMAIL_CODE_TTL_MINUTES } from "../shared/constants";
+import {
+  ADDONS_PASS_TTL_MINUTES,
+  EMAIL_CODE_TTL_MINUTES,
+} from "../shared/constants";
 
 export async function lock(): Promise<void> {
   const state = await getState();
   // Locking before setup would be an unrecoverable lockout (no password
   // exists to unlock with), so the lock is a no-op until setup completes.
   if (!state.setupComplete) return;
-  if (!state.locked) await setState({ locked: true });
+  // Locking always revokes an outstanding about:addons pass — otherwise a
+  // pass taken before locking would survive it.
+  if (!state.locked || state.addonsPassUntil !== null) {
+    await setState({ locked: true, addonsPassUntil: null });
+  }
+}
+
+/**
+ * Grant temporary access to about:addons after verifying the password.
+ * Deliberately short-lived (ADDONS_PASS_TTL_MINUTES) — it authorizes one
+ * visit, not a standing exemption.
+ */
+export async function grantAddonsPass(password: string): Promise<boolean> {
+  const state = await getState();
+  if (!state.passwordHash) return false;
+  const ok = await verifySecret(password, state.passwordHash);
+  if (!ok) return false;
+  await setState({
+    addonsPassUntil: Date.now() + ADDONS_PASS_TTL_MINUTES * 60_000,
+  });
+  return true;
+}
+
+/** True while a granted about:addons pass is still within its TTL. */
+export async function hasValidAddonsPass(): Promise<boolean> {
+  const { addonsPassUntil } = await getState();
+  return addonsPassUntil !== null && Date.now() < addonsPassUntil;
+}
+
+export async function revokeAddonsPass(): Promise<void> {
+  await setState({ addonsPassUntil: null });
 }
 
 export async function unlockWithPassword(password: string): Promise<boolean> {

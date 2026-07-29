@@ -46,6 +46,7 @@ Privatefox-dev/
 │   │   ├── content/              # overlay.ts (content script entry), overlay-ui.ts (closed ShadowRoot UI)
 │   │   ├── newtab/               # chrome_url_overrides.newtab target — the lock/welcome screen
 │   │   ├── popup/                # action.default_popup — toolbar status card + Lock now / Preferences
+│   │   ├── gate/                 # password gate nav-guard redirects to for about:addons
 │   │   ├── options/              # welcome-message editor, password set/change, idle timeout, recovery, block-private-browsing toggle
 │   │   ├── setup/                 # first-run onboarding: force password creation + one-time recovery code display
 │   │   ├── shared/                # crypto.ts, storage.ts, recovery-code.ts, protocol.ts, constants.ts
@@ -73,10 +74,12 @@ Permissions: `storage`, `idle`, `webNavigation`, `nativeMessaging`. `host_permis
 
 **Enforcement boundary.** Content scripts cannot run on `about:addons`, `about:preferences`, or `about:debugging` — there is no technical workaround from inside the extension. This is exactly why `policies.json` (Firefox Enterprise Policies) is the real enforcement layer:
 - `ExtensionSettings.<extension-id>.installation_mode: "force_installed"` (with an `install_url`) — prevents user removal/disabling.
-- `DisablePrivateBrowsing: true` — removes Private Browsing entirely at the browser-chrome level.
-- `BlockAboutAddons: true` — removes access to `about:addons` outright.
+- `DisablePrivateBrowsing: true` — removes Private Browsing entirely at the browser-chrome level. Conditional on the `blockPrivateBrowsing` preference.
+- `BlockAboutAddons: true` — removes access to `about:addons` outright. Conditional on the `blockAboutAddons` preference (default on).
 
-The extension's own `nav-guard.ts` (webNavigation-based redirect away from these pages) is defense-in-depth only, not the enforcement boundary itself.
+Both conditional policies ride along on the `install-policy` native command; `buildPolicies` omits the key when the preference is off. Force-install is unconditional.
+
+**`about:addons` password gate.** `nav-guard.ts` watches `tabs.onUpdated` for the pages in `GATED_PAGES` and redirects to `src/gate/` — a password prompt that, on success, stores a short-lived `addonsPassUntil` (5 min) and forwards the tab to the requested page. This is what protects `about:addons` when `blockAboutAddons` is off, and it is the only protection before Phase 3 is installed; with the policy on, the page is unreachable and the gate never runs. The pass is revoked on every `lock()`, and the gate's `target` query param is validated against `GATED_PAGES` (untrusted input — never forward to an arbitrary URL). Still defense-in-depth: `about:config` and the remote debugging protocol can bypass it.
 
 **Signing requirement.** Even a force-installed, unlisted extension must be signed by AMO on Release-channel Firefox (`xpinstall.signatures.required` cannot be disabled outside Nightly/Developer Edition/ESR). Use `web-ext sign` for unlisted self-distribution, and point `install_url` in `policies.json` at that signed local `.xpi`. Set `updates_disabled: true` since there's no real update channel behind this install.
 

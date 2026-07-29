@@ -24,4 +24,29 @@ export const DERIVED_KEY_BITS = 256;
 /** One-time email recovery codes expire after this many minutes. */
 export const EMAIL_CODE_TTL_MINUTES = 15;
 
+/**
+ * How long access to about:addons stays granted after entering the password.
+ * Short by design: the grant is for one visit, not a persistent exemption.
+ */
+export const ADDONS_PASS_TTL_MINUTES = 5;
+
+/**
+ * Whether about:addons is blocked outright by the enterprise policy
+ * (BlockAboutAddons). When true the page is unreachable and the extension's
+ * password gate never runs; when false the gate is what protects it.
+ */
+export const DEFAULT_BLOCK_ABOUT_ADDONS = true;
+
+/**
+ * Pages the nav-guard keeps behind the password gate. about:addons is the
+ * one that matters (it can disable the extension); the others are cheap
+ * defense-in-depth. Content scripts cannot run on about: pages, so this is
+ * enforced by watching tab URL updates.
+ */
+export const GATED_PAGES = [
+  "about:addons",
+  "about:debugging",
+  "about:profiles",
+] as const;
+
 export const STORAGE_SCHEMA_VERSION = 1;

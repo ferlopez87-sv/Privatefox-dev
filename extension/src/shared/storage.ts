@@ -1,5 +1,6 @@
 import type { HashedSecret } from "./crypto";
 import {
+  DEFAULT_BLOCK_ABOUT_ADDONS,
   DEFAULT_BLOCK_PRIVATE_BROWSING,
   DEFAULT_IDLE_TIMEOUT_MINUTES,
   DEFAULT_WELCOME_MESSAGE,
@@ -23,6 +24,16 @@ export interface PrivatefoxState {
    * policies.json layer (native host); the extension alone cannot block it.
    */
   blockPrivateBrowsing: boolean;
+  /**
+   * Block about:addons outright via the BlockAboutAddons policy. When false,
+   * the page stays reachable but the extension's password gate guards it.
+   */
+  blockAboutAddons: boolean;
+  /**
+   * Expiry (ms since epoch) of a password-granted pass into about:addons.
+   * Null when no pass is active. Cleared on every lock.
+   */
+  addonsPassUntil: number | null;
   passwordHash: HashedSecret | null;
   recoveryHash: HashedSecret | null;
   /** Address the native host sends recovery emails to (empty = not configured). */
@@ -38,6 +49,8 @@ export const DEFAULT_STATE: PrivatefoxState = {
   welcomeMessage: DEFAULT_WELCOME_MESSAGE,
   idleTimeoutMinutes: DEFAULT_IDLE_TIMEOUT_MINUTES,
   blockPrivateBrowsing: DEFAULT_BLOCK_PRIVATE_BROWSING,
+  blockAboutAddons: DEFAULT_BLOCK_ABOUT_ADDONS,
+  addonsPassUntil: null,
   passwordHash: null,
   recoveryHash: null,
   recoveryEmail: "",

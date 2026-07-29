@@ -52,6 +52,24 @@ Key invariants:
 - **Lock before setup is a no-op** — otherwise a fresh install with no
   password would soft-brick the browser.
 
+## The about:addons password gate
+
+Content scripts cannot run on `about:` pages, so `nav-guard.ts` watches
+`tabs.onUpdated` and redirects the pages in `GATED_PAGES` (`about:addons`,
+`about:debugging`, `about:profiles`) to `src/gate/`. Entering the password
+there calls `grantAddonsPass`, which stores `addonsPassUntil = now + 5 min`;
+the guard then lets the navigation through until it expires. Properties:
+
+- **Short-lived by design** — the pass authorizes a visit, not a standing
+  exemption, and `lock()` clears it unconditionally.
+- **Target is validated** — the `?target=` query param is untrusted, so the
+  gate only forwards to a URL that is actually in `GATED_PAGES`.
+- **Layer ordering** — with `BlockAboutAddons` on, Firefox blocks the page
+  before this listener runs and the gate is dead code; with it off, the gate
+  is the protection. Before Phase 3, the gate is the *only* protection.
+- **Not a hard boundary** — `about:config` and the remote debugging protocol
+  still bypass it (see THREAT-MODEL.md).
+
 ## Enforcement layer (outside the extension)
 
 `native-host/src/policy/policies-template.ts` generates:
@@ -67,10 +85,12 @@ Key invariants:
 ```
 
 written to `Firefox.app/Contents/Resources/distribution/policies.json`.
-`DisablePrivateBrowsing` is conditional: the extension's `blockPrivateBrowsing`
-preference (Options → Protection) rides along on the `install-policy` native
-command, and `buildPolicies` omits the key when it is off. `BlockAboutAddons`
-and the force-install are always present. Effective only after full restart;
+`DisablePrivateBrowsing` and `BlockAboutAddons` are both conditional: the
+extension's `blockPrivateBrowsing` / `blockAboutAddons` preferences (Options →
+Protection) ride along on the `install-policy` native command, and
+`buildPolicies` omits each key when it is off. The force-install is always
+present. Turning `blockAboutAddons` off trades the hard block for the
+extension's password gate (below). Effective only after full restart;
 wiped by every Firefox update (the `com.privatefox.policyguard` LaunchAgent
 re-installs it, with a grace delay so Gatekeeper's post-update validation
 isn't disturbed).

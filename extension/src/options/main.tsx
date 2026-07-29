@@ -2,6 +2,7 @@ import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { usePrivatefoxState, sendToBackground } from "../ui/state";
 import { setState as patchState } from "../shared/storage";
+import { ADDONS_PASS_TTL_MINUTES } from "../shared/constants";
 import "../ui/styles.css";
 
 /** Welcome message + idle timeout + recovery email: editable without a password. */
@@ -75,18 +76,24 @@ function GeneralSettings(props: {
  * enforced by the extension alone — they take effect only once the Privatefox
  * native host has (re)written policies.json and Firefox has been restarted.
  */
-function ProtectionSettings(props: { blockPrivateBrowsing: boolean }) {
+function ProtectionSettings(props: {
+  blockPrivateBrowsing: boolean;
+  blockAboutAddons: boolean;
+}) {
   const [blocked, setBlocked] = useState(props.blockPrivateBrowsing);
+  const [addonsBlocked, setAddonsBlocked] = useState(props.blockAboutAddons);
   const [status, setStatus] = useState("");
 
   useEffect(
     () => setBlocked(props.blockPrivateBrowsing),
     [props.blockPrivateBrowsing],
   );
+  useEffect(
+    () => setAddonsBlocked(props.blockAboutAddons),
+    [props.blockAboutAddons],
+  );
 
-  const toggle = async (value: boolean) => {
-    setBlocked(value);
-    await patchState({ blockPrivateBrowsing: value });
+  const saved = () => {
     setStatus("Saved.");
     setTimeout(() => setStatus(""), 2000);
   };
@@ -98,9 +105,11 @@ function ProtectionSettings(props: { blockPrivateBrowsing: boolean }) {
         <input
           type="checkbox"
           checked={blocked}
-          onChange={(e) =>
-            void toggle((e.target as HTMLInputElement).checked)
-          }
+          onChange={(e) => {
+            const value = (e.target as HTMLInputElement).checked;
+            setBlocked(value);
+            void patchState({ blockPrivateBrowsing: value }).then(saved);
+          }}
         />
         <span>Block private / incognito windows</span>
       </label>
@@ -109,6 +118,26 @@ function ProtectionSettings(props: { blockPrivateBrowsing: boolean }) {
         Applies after the Privatefox native host is installed and Firefox is
         restarted (see docs/SETUP.md). Until then this only records your
         preference.
+      </p>
+
+      <label class="toggle">
+        <input
+          type="checkbox"
+          checked={addonsBlocked}
+          onChange={(e) => {
+            const value = (e.target as HTMLInputElement).checked;
+            setAddonsBlocked(value);
+            void patchState({ blockAboutAddons: value }).then(saved);
+          }}
+        />
+        <span>Block about:addons entirely (enterprise policy)</span>
+      </label>
+      <p class="hint">
+        On: about:addons is unreachable once the native host is installed —
+        the strongest protection, but you cannot manage add-ons at all. Off:
+        the page stays reachable and Privatefox asks for your password before
+        opening it ({ADDONS_PASS_TTL_MINUTES}-minute access, revoked on lock).
+        The password gate works today, with or without the native host.
       </p>
       <div class="success">{status}</div>
     </section>
@@ -225,7 +254,10 @@ function App() {
         idleTimeoutMinutes={state.idleTimeoutMinutes}
         recoveryEmail={state.recoveryEmail}
       />
-      <ProtectionSettings blockPrivateBrowsing={state.blockPrivateBrowsing} />
+      <ProtectionSettings
+        blockPrivateBrowsing={state.blockPrivateBrowsing}
+        blockAboutAddons={state.blockAboutAddons}
+      />
       <PasswordSettings hasPassword={state.passwordHash !== null} />
       <section>
         <h2>Lock</h2>

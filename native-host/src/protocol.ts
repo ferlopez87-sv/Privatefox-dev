@@ -5,7 +5,12 @@
  */
 
 export type NativeCommand =
-  | { command: "install-policy"; xpiPath?: string; disablePrivateBrowsing?: boolean }
+  | {
+      command: "install-policy";
+      xpiPath?: string;
+      disablePrivateBrowsing?: boolean;
+      blockAboutAddons?: boolean;
+    }
   | {
       command: "send-recovery-email";
       to: string;

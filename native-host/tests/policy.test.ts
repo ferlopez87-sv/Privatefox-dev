@@ -47,6 +47,17 @@ describe("policies template", () => {
     expect(on.policies["DisablePrivateBrowsing"]).toBe(true);
   });
 
+  it("omits BlockAboutAddons when blockAboutAddons is false", () => {
+    const policies = buildPolicies("/Users/me/pf.xpi", {
+      blockAboutAddons: false,
+    }) as { policies: Record<string, unknown> };
+    // The extension's password gate protects about:addons instead.
+    expect("BlockAboutAddons" in policies.policies).toBe(false);
+    // Force-install and private browsing are unaffected.
+    expect(policies.policies["DisablePrivateBrowsing"]).toBe(true);
+    expect(policies.policies["ExtensionSettings"]).toBeDefined();
+  });
+
   it("rejects relative xpi paths", () => {
     expect(() => buildPolicies("relative/pf.xpi")).toThrow(/absolute/);
   });
