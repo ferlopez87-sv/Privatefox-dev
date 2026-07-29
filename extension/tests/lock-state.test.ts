@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  clearSettingsPassword,
   completeSetup,
-  grantAddonsPass,
   grantSettingsPass,
-  hasValidAddonsPass,
   hasValidSettingsPass,
   issueEmailCode,
   lock,
-  revokeAddonsPass,
+  revokeSettingsPass,
   setPassword,
+  setSettingsPassword,
   unlockWithEmailCode,
   unlockWithPassword,
   unlockWithRecoveryCode,
@@ -90,47 +90,47 @@ describe("lock state machine", () => {
     expect((await setPassword("original", "abc")).ok).toBe(false);
   });
 
-  it("about:addons pass requires the password and expires", async () => {
+  it("settings pass requires the password and expires", async () => {
     await completeSetup("hunter22");
-    expect(await hasValidAddonsPass()).toBe(false);
+    expect(await hasValidSettingsPass()).toBe(false);
 
-    expect(await grantAddonsPass("wrong")).toBe(false);
-    expect(await hasValidAddonsPass()).toBe(false);
+    expect(await grantSettingsPass("wrong")).toBe(false);
+    expect(await hasValidSettingsPass()).toBe(false);
 
-    expect(await grantAddonsPass("hunter22")).toBe(true);
-    expect(await hasValidAddonsPass()).toBe(true);
+    expect(await grantSettingsPass("hunter22")).toBe(true);
+    expect(await hasValidSettingsPass()).toBe(true);
 
     // Expires after its TTL (5 minutes).
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 6 * 60_000);
-    expect(await hasValidAddonsPass()).toBe(false);
+    expect(await hasValidSettingsPass()).toBe(false);
     vi.useRealTimers();
   });
 
-  it("locking revokes an outstanding about:addons pass", async () => {
+  it("locking revokes an outstanding settings pass", async () => {
     await completeSetup("hunter22");
-    expect(await grantAddonsPass("hunter22")).toBe(true);
-    expect(await hasValidAddonsPass()).toBe(true);
+    expect(await grantSettingsPass("hunter22")).toBe(true);
+    expect(await hasValidSettingsPass()).toBe(true);
 
     await lock();
-    expect(await hasValidAddonsPass()).toBe(false);
-    expect((await getState()).addonsPassUntil).toBeNull();
+    expect(await hasValidSettingsPass()).toBe(false);
+    expect((await getState()).settingsPassUntil).toBeNull();
   });
 
-  it("revokes the about:addons pass on demand", async () => {
+  it("revokes the settings pass on demand", async () => {
     await completeSetup("hunter22");
-    await grantAddonsPass("hunter22");
-    await revokeAddonsPass();
-    expect(await hasValidAddonsPass()).toBe(false);
+    await grantSettingsPass("hunter22");
+    await revokeSettingsPass();
+    expect(await hasValidSettingsPass()).toBe(false);
   });
 
-  it("grants no about:addons pass when the password was cleared by recovery", async () => {
+  it("grants no settings pass when recovery cleared the passwords", async () => {
     const code = await completeSetup("hunter22");
     await lock();
     await unlockWithRecoveryCode(code);
     // passwordHash is null until a new password is set — nothing to verify.
-    expect(await grantAddonsPass("hunter22")).toBe(false);
-    expect(await hasValidAddonsPass()).toBe(false);
+    expect(await grantSettingsPass("hunter22")).toBe(false);
+    expect(await hasValidSettingsPass()).toBe(false);
   });
 
   it("preferences pass requires the password, expires, and dies on lock", async () => {
@@ -153,6 +153,83 @@ describe("lock state machine", () => {
     vi.setSystemTime(Date.now() + 6 * 60_000);
     expect(await hasValidSettingsPass()).toBe(false);
     vi.useRealTimers();
+  });
+
+  it("falls back to the browser password until a settings password exists", async () => {
+    await completeSetup("browsing-pw");
+    // Otherwise there would be no way into the options page to set one.
+    expect(await grantSettingsPass("browsing-pw")).toBe(true);
+  });
+
+  it("stops accepting the browser password once a settings password is set", async () => {
+    await completeSetup("browsing-pw");
+    expect(
+      (await setSettingsPassword("browsing-pw", "settings-pw")).ok,
+    ).toBe(true);
+
+    // The separation is the whole point of the second password.
+    expect(await grantSettingsPass("browsing-pw")).toBe(false);
+    expect(await grantSettingsPass("settings-pw")).toBe(true);
+
+    // ...and the browser still unlocks with the browsing password only.
+    await lock();
+    expect(await unlockWithPassword("settings-pw")).toBe(false);
+    expect(await unlockWithPassword("browsing-pw")).toBe(true);
+  });
+
+  it("claiming the settings password requires the browser password", async () => {
+    await completeSetup("browsing-pw");
+    expect(await setSettingsPassword("wrong", "settings-pw")).toEqual({
+      ok: false,
+      error: "Browser password is incorrect.",
+    });
+    expect((await setSettingsPassword("browsing-pw", "abc")).ok).toBe(false);
+  });
+
+  it("changing the settings password requires the current one", async () => {
+    await completeSetup("browsing-pw");
+    await setSettingsPassword("browsing-pw", "settings-pw");
+
+    // The browser password no longer authorizes a change.
+    expect((await setSettingsPassword("browsing-pw", "sneaky")).ok).toBe(false);
+    expect((await setSettingsPassword("settings-pw", "updated-pw")).ok).toBe(
+      true,
+    );
+    expect(await grantSettingsPass("updated-pw")).toBe(true);
+  });
+
+  it("removing the settings password restores the fallback", async () => {
+    await completeSetup("browsing-pw");
+    await setSettingsPassword("browsing-pw", "settings-pw");
+
+    expect((await clearSettingsPassword("wrong")).ok).toBe(false);
+    expect((await clearSettingsPassword("settings-pw")).ok).toBe(true);
+    expect(await grantSettingsPass("browsing-pw")).toBe(true);
+  });
+
+  it("recovery clears BOTH passwords (the way back if you forget either)", async () => {
+    const code = await completeSetup("browsing-pw");
+    await setSettingsPassword("browsing-pw", "settings-pw");
+    await lock();
+
+    await unlockWithRecoveryCode(code);
+
+    const state = await getState();
+    expect(state.passwordHash).toBeNull();
+    expect(state.settingsPasswordHash).toBeNull();
+  });
+
+  it("email-code recovery also clears both passwords", async () => {
+    await completeSetup("browsing-pw");
+    await setSettingsPassword("browsing-pw", "settings-pw");
+    await lock();
+
+    const code = await issueEmailCode();
+    expect(await unlockWithEmailCode(code)).toBe(true);
+
+    const state = await getState();
+    expect(state.passwordHash).toBeNull();
+    expect(state.settingsPasswordHash).toBeNull();
   });
 
   it("email codes are one-time and expire", async () => {

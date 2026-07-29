@@ -8,6 +8,34 @@ Firefox shows on the add-on card.
 The native host versions independently — it installs separately and only
 moves when the host itself changes.
 
+## 1.4.0
+
+### Fixed
+
+- **`about:addons` was not gated at all in 1.3.0.** `tabs.onUpdated` only
+  reports `changeInfo.url` when the extension holds the `tabs` permission or
+  a host permission matching the URL — and `<all_urls>` does not match
+  `about:` URLs (nothing can). The guard received no URL, returned early,
+  and the gate silently did nothing. The `tabs` permission is now requested,
+  with a regression test asserting it.
+
+### Added
+
+- **A separate settings password.** The browser password now only unlocks
+  browsing. Firefox preferences, `about:addons` and this extension's options
+  are guarded by a second password, on the reasoning that the browsing
+  password is typed constantly and stops being a real decision, while these
+  surfaces are where the protections themselves get turned off.
+  - Set or change it in Options → Settings password. Claiming it the first
+    time requires the browser password; changing it afterwards requires the
+    current settings password.
+  - Until one is set, the browser password is accepted as a fallback —
+    otherwise there would be no way into the options page to configure it.
+  - One 5-minute pass covers all protected surfaces and is revoked on lock.
+  - Forgetting it is recoverable: the recovery code and emailed codes now
+    clear **both** passwords and force a reset.
+- `about:preferences` is now gated alongside `about:addons`.
+
 ## 1.3.0
 
 ### Fixed

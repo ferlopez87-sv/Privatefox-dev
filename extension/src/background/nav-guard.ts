@@ -1,6 +1,6 @@
 import { getState } from "../shared/storage";
 import { GATED_PAGES } from "../shared/constants";
-import { hasValidAddonsPass } from "./lock-state";
+import { hasValidSettingsPass } from "./lock-state";
 
 /**
  * Password gate for about:addons (and sibling escape hatches).
@@ -9,7 +9,7 @@ import { hasValidAddonsPass } from "./lock-state";
  * for them, so the only lever from inside the extension is watching tab URL
  * updates and steering away. Navigation is therefore redirected to an
  * extension-owned gate page that asks for the password; entering it grants a
- * short-lived pass (see grantAddonsPass) and the tab is sent to the target.
+ * short-lived pass (see grantSettingsPass) and the tab is sent to the target.
  *
  * This remains defense-in-depth: with the BlockAboutAddons enterprise policy
  * active the page is unreachable before this listener ever runs. The gate is
@@ -36,7 +36,7 @@ export function registerNavGuard(): void {
         void browser.tabs.update(tabId, { url: "about:newtab" });
         return;
       }
-      if (await hasValidAddonsPass()) return;
+      if (await hasValidSettingsPass()) return;
       void browser.tabs.update(tabId, { url: gateUrlFor(url) });
     })();
   });

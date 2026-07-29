@@ -19,7 +19,12 @@ export function getManifest(): chrome.runtime.ManifestV3 {
       scripts: ["src/background/index.ts"],
       type: "module",
     },
-    permissions: ["storage", "idle", "webNavigation", "nativeMessaging"],
+    // "tabs" is required, not optional: tabs.onUpdated only reports
+    // changeInfo.url when the extension has this permission or a host
+    // permission covering that URL — and <all_urls> does NOT match about:
+    // URLs (nothing can). Without it the nav-guard never sees a navigation
+    // to about:addons and the gate silently does nothing.
+    permissions: ["storage", "idle", "tabs", "webNavigation", "nativeMessaging"],
     host_permissions: ["<all_urls>"],
     content_scripts: [
       {

@@ -2,14 +2,14 @@ import type { RuntimeRequest, RuntimeResponse } from "../shared/protocol";
 import { getState, setState } from "../shared/storage";
 import { EMAIL_CODE_TTL_MINUTES } from "../shared/constants";
 import {
+  clearSettingsPassword,
   completeSetup,
-  grantAddonsPass,
   grantSettingsPass,
   issueEmailCode,
   lock,
-  revokeAddonsPass,
   revokeSettingsPass,
   setPassword,
+  setSettingsPassword,
   unlockWithEmailCode,
   unlockWithPassword,
   unlockWithRecoveryCode,
@@ -63,15 +63,6 @@ async function handle(request: RuntimeRequest): Promise<RuntimeResponse> {
       await lock();
       return { ok: true, locked: (await getState()).locked };
     }
-    case "addons-access-attempt": {
-      const ok = await grantAddonsPass(request.password);
-      if (!ok) return { ok: false, error: "Incorrect password." };
-      return { ok: true, locked: (await getState()).locked };
-    }
-    case "revoke-addons-pass": {
-      await revokeAddonsPass();
-      return { ok: true, locked: (await getState()).locked };
-    }
     case "settings-access-attempt": {
       const ok = await grantSettingsPass(request.password);
       if (!ok) return { ok: false, error: "Incorrect password." };
@@ -79,6 +70,21 @@ async function handle(request: RuntimeRequest): Promise<RuntimeResponse> {
     }
     case "revoke-settings-pass": {
       await revokeSettingsPass();
+      return { ok: true, locked: (await getState()).locked };
+    }
+    case "set-settings-password": {
+      const result = await setSettingsPassword(
+        request.currentSecret,
+        request.newPassword,
+      );
+      if (!result.ok) return result;
+      return { ok: true, locked: (await getState()).locked };
+    }
+    case "clear-settings-password": {
+      const result = await clearSettingsPassword(
+        request.currentSettingsPassword,
+      );
+      if (!result.ok) return result;
       return { ok: true, locked: (await getState()).locked };
     }
     case "set-password": {

@@ -6,7 +6,6 @@ import {
 } from "../shared/recovery-code";
 import { getState, setState } from "../shared/storage";
 import {
-  ADDONS_PASS_TTL_MINUTES,
   EMAIL_CODE_TTL_MINUTES,
   SETTINGS_PASS_TTL_MINUTES,
 } from "../shared/constants";
@@ -19,11 +18,7 @@ export async function lock(): Promise<void> {
   if (!state.setupComplete) return;
   // Locking always revokes outstanding passes — otherwise a pass taken
   // before locking would survive it.
-  await setState({
-    locked: true,
-    addonsPassUntil: null,
-    settingsPassUntil: null,
-  });
+  await setState({ locked: true, settingsPassUntil: null });
   // Persisting `locked` only draws the overlay on ordinary web pages; this
   // puts the lock screen on surfaces the content script cannot reach.
   // Unconditional (not just on a false -> true transition) so that a lock
@@ -32,46 +27,79 @@ export async function lock(): Promise<void> {
 }
 
 /**
- * Grant temporary access to about:addons after verifying the password.
- * Deliberately short-lived (ADDONS_PASS_TTL_MINUTES) — it authorizes one
- * visit, not a standing exemption.
+ * Verify a candidate against the settings password.
+ *
+ * Falls back to the browsing password while no settings password is set —
+ * without that fallback a fresh install could never reach the options page
+ * to configure one. Once set, the browsing password is NOT accepted here:
+ * that separation is the whole point, since the browsing password is typed
+ * constantly and the settings password guards turning the lock off.
  */
-export async function grantAddonsPass(password: string): Promise<boolean> {
+async function verifySettingsSecret(candidate: string): Promise<boolean> {
   const state = await getState();
-  if (!state.passwordHash) return false;
-  const ok = await verifySecret(password, state.passwordHash);
-  if (!ok) return false;
-  await setState({
-    addonsPassUntil: Date.now() + ADDONS_PASS_TTL_MINUTES * 60_000,
-  });
-  return true;
-}
-
-/** True while a granted about:addons pass is still within its TTL. */
-export async function hasValidAddonsPass(): Promise<boolean> {
-  const { addonsPassUntil } = await getState();
-  return addonsPassUntil !== null && Date.now() < addonsPassUntil;
-}
-
-export async function revokeAddonsPass(): Promise<void> {
-  await setState({ addonsPassUntil: null });
+  const target = state.settingsPasswordHash ?? state.passwordHash;
+  if (!target) return false;
+  return verifySecret(candidate, target);
 }
 
 /**
- * Grant temporary access to the preferences page after verifying the
- * password. Preferences are where the protections themselves are configured
- * (idle timeout, policy toggles), so they get the same treatment as
- * about:addons rather than being open to anyone at the keyboard.
+ * Grant temporary access to the protected surfaces (Firefox preferences,
+ * about:addons, this extension's options) after verifying the settings
+ * password. One pass covers all of them and is revoked on lock.
  */
 export async function grantSettingsPass(password: string): Promise<boolean> {
-  const state = await getState();
-  if (!state.passwordHash) return false;
-  const ok = await verifySecret(password, state.passwordHash);
-  if (!ok) return false;
+  if (!(await verifySettingsSecret(password))) return false;
   await setState({
     settingsPassUntil: Date.now() + SETTINGS_PASS_TTL_MINUTES * 60_000,
   });
   return true;
+}
+
+/**
+ * Set or change the settings password. Changing it requires the current
+ * settings password; setting it for the first time requires the browsing
+ * password, so an unlocked browser alone is not enough to claim it.
+ */
+export async function setSettingsPassword(
+  currentSecret: string,
+  newPassword: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (newPassword.length < 4) {
+    return { ok: false, error: "Password must be at least 4 characters." };
+  }
+  const state = await getState();
+  if (state.settingsPasswordHash) {
+    if (!(await verifySecret(currentSecret, state.settingsPasswordHash))) {
+      return { ok: false, error: "Current settings password is incorrect." };
+    }
+  } else {
+    if (
+      !state.passwordHash ||
+      !(await verifySecret(currentSecret, state.passwordHash))
+    ) {
+      return { ok: false, error: "Browser password is incorrect." };
+    }
+  }
+  await setState({ settingsPasswordHash: await hashSecret(newPassword) });
+  return { ok: true };
+}
+
+/**
+ * Drop the settings password, returning to the fallback where the browsing
+ * password guards the protected surfaces. Requires the current one.
+ */
+export async function clearSettingsPassword(
+  currentSettingsPassword: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const state = await getState();
+  if (!state.settingsPasswordHash) return { ok: true };
+  if (
+    !(await verifySecret(currentSettingsPassword, state.settingsPasswordHash))
+  ) {
+    return { ok: false, error: "Current settings password is incorrect." };
+  }
+  await setState({ settingsPasswordHash: null, settingsPassUntil: null });
+  return { ok: true };
 }
 
 /** True while a granted preferences pass is still within its TTL. */
@@ -93,8 +121,11 @@ export async function unlockWithPassword(password: string): Promise<boolean> {
 }
 
 /**
- * Recovery code unlocks AND clears the password so the user is forced to
- * set a new one (the code is one-time by design: a fresh code is issued).
+ * Recovery code unlocks AND clears both passwords so the user is forced to
+ * set new ones (the code is one-time by design: a fresh code is issued).
+ * The settings password is cleared too — it is the only way back in if that
+ * is the one you forgot, and recovery is already the deliberate escape
+ * hatch: one-time, rotated on use, and meant to be stored inconveniently.
  * Returns the new recovery code to display, or null if the code was wrong.
  */
 export async function unlockWithRecoveryCode(
@@ -108,6 +139,8 @@ export async function unlockWithRecoveryCode(
   await setState({
     locked: false,
     passwordHash: null,
+    settingsPasswordHash: null,
+    settingsPassUntil: null,
     recoveryHash: await hashSecret(newCode),
   });
   return newCode;
@@ -125,14 +158,20 @@ export async function issueEmailCode(): Promise<string> {
   return code;
 }
 
-/** Like recovery-code unlock: clears the password, forces a reset. */
+/** Like recovery-code unlock: clears both passwords, forces a reset. */
 export async function unlockWithEmailCode(code: string): Promise<boolean> {
   const state = await getState();
   const active = state.emailCode;
   if (!active || Date.now() > active.expiresAt) return false;
   const ok = await verifySecret(code.trim(), active.hash);
   if (!ok) return false;
-  await setState({ locked: false, passwordHash: null, emailCode: null });
+  await setState({
+    locked: false,
+    passwordHash: null,
+    settingsPasswordHash: null,
+    settingsPassUntil: null,
+    emailCode: null,
+  });
   return true;
 }
 

@@ -25,14 +25,10 @@ export const DERIVED_KEY_BITS = 256;
 export const EMAIL_CODE_TTL_MINUTES = 15;
 
 /**
- * How long access to about:addons stays granted after entering the password.
- * Short by design: the grant is for one visit, not a persistent exemption.
- */
-export const ADDONS_PASS_TTL_MINUTES = 5;
-
-/**
- * How long the preferences page stays open after entering the password.
- * Same reasoning as the about:addons pass: one visit, not a standing grant.
+ * How long protected surfaces stay open after entering the settings
+ * password. One pass covers all of them (Firefox preferences, about:addons,
+ * and this extension's options) — it authorizes a visit, not a standing
+ * grant, and is revoked on every lock.
  */
 export const SETTINGS_PASS_TTL_MINUTES = 5;
 
@@ -47,13 +43,15 @@ export const LOCK_PAGE_PATH = "src/newtab/index.html";
 export const DEFAULT_BLOCK_ABOUT_ADDONS = true;
 
 /**
- * Pages the nav-guard keeps behind the password gate. about:addons is the
- * one that matters (it can disable the extension); the others are cheap
+ * Pages the nav-guard keeps behind the settings password. about:addons is
+ * the one that matters (it can disable the extension) and about:preferences
+ * is where Firefox itself is configured; the others are cheap
  * defense-in-depth. Content scripts cannot run on about: pages, so this is
  * enforced by watching tab URL updates.
  */
 export const GATED_PAGES = [
   "about:addons",
+  "about:preferences",
   "about:debugging",
   "about:profiles",
 ] as const;

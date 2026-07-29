@@ -1,7 +1,7 @@
 import { render } from "preact";
 import { useState } from "preact/hooks";
 import { sendToBackground } from "../ui/state";
-import { ADDONS_PASS_TTL_MINUTES, GATED_PAGES } from "../shared/constants";
+import { SETTINGS_PASS_TTL_MINUTES, GATED_PAGES } from "../shared/constants";
 import "../ui/styles.css";
 
 /**
@@ -33,7 +33,7 @@ function App() {
     setError("");
     try {
       const res = await sendToBackground({
-        kind: "addons-access-attempt",
+        kind: "settings-access-attempt",
         password,
       });
       if (!res.ok) {
@@ -52,8 +52,8 @@ function App() {
     <main class="centered">
       <h1>Password required</h1>
       <p class="message">
-        <code>{target}</code> is protected by Privatefox. Enter your password
-        to continue.
+        <code>{target}</code> is protected by Privatefox. Enter your{" "}
+        <strong>settings password</strong> to continue.
       </p>
       <form class="row" onSubmit={submit}>
         <input
@@ -71,7 +71,7 @@ function App() {
       </form>
       <div class="error">{error}</div>
       <p class="hint">
-        Access stays open for {ADDONS_PASS_TTL_MINUTES} minutes, and ends as
+        Access stays open for {SETTINGS_PASS_TTL_MINUTES} minutes, and ends as
         soon as the browser locks.
       </p>
       <p>

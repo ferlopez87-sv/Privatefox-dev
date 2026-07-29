@@ -14,12 +14,18 @@ export type RuntimeRequest =
   | { kind: "email-code-attempt"; code: string }
   | { kind: "request-email-code" }
   | { kind: "lock-now" }
-  /** Password check that grants temporary access to about:addons. */
-  | { kind: "addons-access-attempt"; password: string }
-  | { kind: "revoke-addons-pass" }
-  /** Password check that grants temporary access to the preferences page. */
+  /**
+   * Settings password: unlocks the protected surfaces (Firefox preferences,
+   * about:addons, this extension's options) with one shared pass.
+   */
   | { kind: "settings-access-attempt"; password: string }
   | { kind: "revoke-settings-pass" }
+  | {
+      kind: "set-settings-password";
+      currentSecret: string;
+      newPassword: string;
+    }
+  | { kind: "clear-settings-password"; currentSettingsPassword: string }
   | {
       kind: "set-password";
       currentPassword: string | null;

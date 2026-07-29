@@ -3,7 +3,6 @@ import { useEffect, useState } from "preact/hooks";
 import { usePrivatefoxState, sendToBackground } from "../ui/state";
 import { setState as patchState } from "../shared/storage";
 import {
-  ADDONS_PASS_TTL_MINUTES,
   SETTINGS_PASS_TTL_MINUTES,
 } from "../shared/constants";
 import "../ui/styles.css";
@@ -139,7 +138,7 @@ function ProtectionSettings(props: {
         On: about:addons is unreachable once the native host is installed —
         the strongest protection, but you cannot manage add-ons at all. Off:
         the page stays reachable and Privatefox asks for your password before
-        opening it ({ADDONS_PASS_TTL_MINUTES}-minute access, revoked on lock).
+        opening it ({SETTINGS_PASS_TTL_MINUTES}-minute access, revoked on lock).
         The password gate works today, with or without the native host.
       </p>
       <div class="success">{status}</div>
@@ -180,7 +179,9 @@ function PasswordSettings(props: { hasPassword: boolean }) {
 
   return (
     <section>
-      <h2>{props.hasPassword ? "Change password" : "Set a new password"}</h2>
+      <h2>
+        {props.hasPassword ? "Change browser password" : "Set a new browser password"}
+      </h2>
       {!props.hasPassword && (
         <p class="hint">
           Your password was cleared by a recovery unlock — set a new one now.
@@ -189,7 +190,7 @@ function PasswordSettings(props: { hasPassword: boolean }) {
       <form onSubmit={submit}>
         {props.hasPassword && (
           <>
-            <label>Current password</label>
+            <label>Current browser password</label>
             <input
               type="password"
               value={current}
@@ -257,7 +258,8 @@ function SettingsGate() {
     <main class="centered">
       <h1>Password required</h1>
       <p class="message">
-        Enter your password to open Privatefox preferences.
+        Enter your <strong>settings password</strong> to open Privatefox
+        preferences.
       </p>
       <form class="row" onSubmit={submit}>
         <input
@@ -279,6 +281,131 @@ function SettingsGate() {
         close as soon as the browser locks.
       </p>
     </main>
+  );
+}
+
+/**
+ * The second password: guards Firefox preferences, about:addons and this
+ * page. Separate from the browsing password on purpose — that one is typed
+ * all day and stops being a real decision.
+ */
+function SettingsPasswordSettings(props: { hasSettingsPassword: boolean }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+
+  const submit = async (event: Event) => {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+    if (next !== confirm) {
+      setError("New passwords do not match.");
+      return;
+    }
+    if (next === current) {
+      setError("Pick a password different from the one you just entered.");
+      return;
+    }
+    const res = await sendToBackground({
+      kind: "set-settings-password",
+      currentSecret: current,
+      newPassword: next,
+    });
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setCurrent("");
+    setNext("");
+    setConfirm("");
+    setStatus("Settings password updated.");
+  };
+
+  const clear = async () => {
+    setError("");
+    setStatus("");
+    if (!current) {
+      setError("Enter the current settings password to remove it.");
+      return;
+    }
+    const res = await sendToBackground({
+      kind: "clear-settings-password",
+      currentSettingsPassword: current,
+    });
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setCurrent("");
+    setStatus(
+      "Settings password removed — the browser password guards these surfaces again.",
+    );
+  };
+
+  return (
+    <section>
+      <h2>Settings password</h2>
+      {props.hasSettingsPassword ? (
+        <p class="hint">
+          Firefox preferences, about:addons and this page need this password.
+          The browser password does not open them.
+        </p>
+      ) : (
+        <p class="hint">
+          Not set — the browser password currently opens Firefox preferences,
+          about:addons and this page. Setting a separate one here is the
+          point of the feature: keep it somewhere you have to go and fetch,
+          so turning the lock off stops being an impulse.
+        </p>
+      )}
+      <form onSubmit={submit}>
+        <label>
+          {props.hasSettingsPassword
+            ? "Current settings password"
+            : "Browser password (to confirm it is you)"}
+        </label>
+        <input
+          type="password"
+          value={current}
+          autocomplete="off"
+          onInput={(e) => setCurrent((e.target as HTMLInputElement).value)}
+        />
+        <label>New settings password</label>
+        <input
+          type="password"
+          value={next}
+          autocomplete="new-password"
+          onInput={(e) => setNext((e.target as HTMLInputElement).value)}
+        />
+        <label>Confirm new settings password</label>
+        <input
+          type="password"
+          value={confirm}
+          autocomplete="new-password"
+          onInput={(e) => setConfirm((e.target as HTMLInputElement).value)}
+        />
+        <div class="error">{error}</div>
+        <div class="success">{status}</div>
+        <div class="row">
+          <button type="submit">
+            {props.hasSettingsPassword
+              ? "Change settings password"
+              : "Set settings password"}
+          </button>
+          {props.hasSettingsPassword && (
+            <button type="button" class="secondary" onClick={() => void clear()}>
+              Remove it
+            </button>
+          )}
+        </div>
+      </form>
+      <p class="hint">
+        If you forget it, the recovery code or an emailed code clears both
+        passwords and forces a reset.
+      </p>
+    </section>
   );
 }
 
@@ -349,6 +476,9 @@ function App() {
         blockAboutAddons={state.blockAboutAddons}
       />
       <PasswordSettings hasPassword={state.passwordHash !== null} />
+      <SettingsPasswordSettings
+        hasSettingsPassword={state.settingsPasswordHash !== null}
+      />
       <section>
         <h2>Lock</h2>
         <div class="row">

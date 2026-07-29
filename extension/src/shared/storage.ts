@@ -30,16 +30,26 @@ export interface PrivatefoxState {
    */
   blockAboutAddons: boolean;
   /**
-   * Expiry (ms since epoch) of a password-granted pass into about:addons.
-   * Null when no pass is active. Cleared on every lock.
-   */
-  addonsPassUntil: number | null;
-  /**
-   * Expiry (ms since epoch) of a password-granted pass into the preferences
-   * page. Null when no pass is active. Cleared on every lock.
+   * Expiry (ms since epoch) of the pass granted by the settings password.
+   * One pass covers every protected surface (Firefox preferences,
+   * about:addons, this extension's options). Null when no pass is active,
+   * and cleared on every lock.
    */
   settingsPassUntil: number | null;
+  /** Unlocks the browser. Typed often, so it lives in muscle memory. */
   passwordHash: HashedSecret | null;
+  /**
+   * Second, separate password for the protected surfaces (Firefox
+   * preferences, about:addons, this extension's options). Deliberately not
+   * the browsing password: those surfaces are where the protections
+   * themselves can be turned off, so they should take a secret you have to
+   * go and fetch rather than one you type all day.
+   *
+   * Null means "not configured yet" and the browsing password is accepted
+   * as a fallback — otherwise there would be no way into the options page
+   * to set this password in the first place.
+   */
+  settingsPasswordHash: HashedSecret | null;
   recoveryHash: HashedSecret | null;
   /** Address the native host sends recovery emails to (empty = not configured). */
   recoveryEmail: string;
@@ -55,9 +65,9 @@ export const DEFAULT_STATE: PrivatefoxState = {
   idleTimeoutMinutes: DEFAULT_IDLE_TIMEOUT_MINUTES,
   blockPrivateBrowsing: DEFAULT_BLOCK_PRIVATE_BROWSING,
   blockAboutAddons: DEFAULT_BLOCK_ABOUT_ADDONS,
-  addonsPassUntil: null,
   settingsPassUntil: null,
   passwordHash: null,
+  settingsPasswordHash: null,
   recoveryHash: null,
   recoveryEmail: "",
   emailCode: null,

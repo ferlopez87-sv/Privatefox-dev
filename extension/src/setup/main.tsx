@@ -95,6 +95,12 @@ function App() {
         Choose the password that unlocks this browser. After setup, Firefox
         locks on every startup and after inactivity.
       </p>
+      <p class="hint">
+        You can add a second, separate password for Firefox preferences,
+        about:addons and this extension's settings afterwards, from the
+        options page — keeping it somewhere inconvenient is what stops
+        "turn the lock off" from being an impulse.
+      </p>
       <form onSubmit={submit}>
         <label>Password</label>
         <input
