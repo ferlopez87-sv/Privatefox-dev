@@ -57,12 +57,12 @@ Privatefox-dev/
 ├── extension/                   # the WebExtension (Vite + TypeScript)
 │   ├── src/
 │   │   ├── manifest.ts          # source-of-truth manifest object, consumed by the vite plugin
-│   │   ├── background/          # index.ts, lock-state.ts, idle-monitor.ts, nav-guard.ts, native-bridge.ts, router.ts
+│   │   ├── background/          # index.ts, lock-state.ts, surface-lock.ts, idle-monitor.ts, nav-guard.ts, native-bridge.ts, router.ts
 │   │   ├── content/              # overlay.ts (content script entry), overlay-ui.ts (closed ShadowRoot UI)
 │   │   ├── newtab/               # chrome_url_overrides.newtab target — the lock/welcome screen
 │   │   ├── popup/                # action.default_popup — toolbar status card + Lock now / Preferences
 │   │   ├── gate/                 # password gate nav-guard redirects to for about:addons
-│   │   ├── options/              # welcome-message editor, password set/change, idle timeout, recovery, block-private-browsing toggle
+│   │   ├── options/              # password-gated (settingsPassUntil); welcome message, password, idle timeout, recovery, protection toggles
 │   │   ├── setup/                 # first-run onboarding: force password creation + one-time recovery code display
 │   │   ├── shared/                # crypto.ts, storage.ts, recovery-code.ts, protocol.ts, constants.ts
 │   │   └── ui/                    # Preact components shared by lock/options/setup screens
@@ -93,6 +93,10 @@ Permissions: `storage`, `idle`, `webNavigation`, `nativeMessaging`. `host_permis
 - `BlockAboutAddons: true` — removes access to `about:addons` outright. Conditional on the `blockAboutAddons` preference (default on).
 
 Both conditional policies ride along on the `install-policy` native command; `buildPolicies` omits the key when the preference is off. Force-install is unconditional.
+
+**Making the lock visible.** Persisting `locked: true` only draws the overlay where the content script runs (http/https/file). It cannot run on extension pages, `about:` pages, or the startup window (`about:home` is not the newtab override), so `lock()` ends by calling `surfaceLockScreen()` (`background/surface-lock.ts`), which navigates each *focused* tab that cannot host the overlay to the lock page. Runs unconditionally, so locking while already locked re-asserts a visible lock screen. **Never "fix" a missing lock screen by only writing storage** — that was the original bug.
+
+**Preferences password gate.** `src/options/` renders a password prompt unless `settingsPassUntil` is in the future (5 min, revoked on `lock()`). Preferences configure the protections themselves, so they are gated like `about:addons`. Gating happens inside the page (it is extension-owned), not via `nav-guard`.
 
 **`about:addons` password gate.** `nav-guard.ts` watches `tabs.onUpdated` for the pages in `GATED_PAGES` and redirects to `src/gate/` — a password prompt that, on success, stores a short-lived `addonsPassUntil` (5 min) and forwards the tab to the requested page. This is what protects `about:addons` when `blockAboutAddons` is off, and it is the only protection before Phase 3 is installed; with the policy on, the page is unreachable and the gate never runs. The pass is revoked on every `lock()`, and the gate's `target` query param is validated against `GATED_PAGES` (untrusted input — never forward to an arbitrary URL). Still defense-in-depth: `about:config` and the remote debugging protocol can bypass it.
 

@@ -17,6 +17,9 @@ export type RuntimeRequest =
   /** Password check that grants temporary access to about:addons. */
   | { kind: "addons-access-attempt"; password: string }
   | { kind: "revoke-addons-pass" }
+  /** Password check that grants temporary access to the preferences page. */
+  | { kind: "settings-access-attempt"; password: string }
+  | { kind: "revoke-settings-pass" }
   | {
       kind: "set-password";
       currentPassword: string | null;

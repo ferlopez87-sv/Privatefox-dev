@@ -2,7 +2,10 @@ import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { usePrivatefoxState, sendToBackground } from "../ui/state";
 import { setState as patchState } from "../shared/storage";
-import { ADDONS_PASS_TTL_MINUTES } from "../shared/constants";
+import {
+  ADDONS_PASS_TTL_MINUTES,
+  SETTINGS_PASS_TTL_MINUTES,
+} from "../shared/constants";
 import "../ui/styles.css";
 
 /** Welcome message + idle timeout + recovery email: editable without a password. */
@@ -221,9 +224,92 @@ function PasswordSettings(props: { hasPassword: boolean }) {
   );
 }
 
+/**
+ * Password prompt shown before the preferences themselves. Preferences are
+ * where the protections are configured, so leaving them open would let
+ * anyone at an unlocked browser just turn the lock off.
+ */
+function SettingsGate() {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: Event) => {
+    event.preventDefault();
+    if (!password || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await sendToBackground({
+        kind: "settings-access-attempt",
+        password,
+      });
+      // On success the state change re-renders this page with the settings;
+      // no navigation needed.
+      if (!res.ok) setError(res.error);
+      setPassword("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <main class="centered">
+      <h1>Password required</h1>
+      <p class="message">
+        Enter your password to open Privatefox preferences.
+      </p>
+      <form class="row" onSubmit={submit}>
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          autocomplete="off"
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autofocus
+          onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
+        />
+        <button type="submit" disabled={busy}>
+          Continue
+        </button>
+      </form>
+      <div class="error">{error}</div>
+      <p class="hint">
+        Preferences stay open for {SETTINGS_PASS_TTL_MINUTES} minutes, and
+        close as soon as the browser locks.
+      </p>
+    </main>
+  );
+}
+
+/**
+ * Returns a timestamp that refreshes when `deadline` passes, so a pass
+ * expiring while the page sits open actually closes it instead of leaving
+ * the settings on screen until some other state change repaints.
+ */
+function useNow(deadline: number | null): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (deadline === null) return;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      setNow(Date.now());
+      return;
+    }
+    const timer = setTimeout(() => setNow(Date.now()), remaining + 50);
+    return () => clearTimeout(timer);
+  }, [deadline]);
+  return now;
+}
+
 function App() {
   const state = usePrivatefoxState();
+  // Hooks must run unconditionally, so this sits above the early returns.
+  const now = useNow(state?.settingsPassUntil ?? null);
   if (!state) return null;
+
+  const passValid =
+    state.settingsPassUntil !== null && now < state.settingsPassUntil;
 
   if (!state.setupComplete) {
     return (
@@ -246,6 +332,10 @@ function App() {
     );
   }
 
+  // The pass expires on a wall-clock deadline, so re-check when it passes
+  // rather than leaving the settings on screen until something else changes.
+  if (!passValid) return <SettingsGate />;
+
   return (
     <main>
       <h1>Privatefox Options</h1>
@@ -261,12 +351,22 @@ function App() {
       <PasswordSettings hasPassword={state.passwordHash !== null} />
       <section>
         <h2>Lock</h2>
-        <button
-          class="secondary"
-          onClick={() => void sendToBackground({ kind: "lock-now" })}
-        >
-          Lock the browser now
-        </button>
+        <div class="row">
+          <button
+            class="secondary"
+            onClick={() => void sendToBackground({ kind: "lock-now" })}
+          >
+            Lock the browser now
+          </button>
+          <button
+            class="secondary"
+            onClick={() =>
+              void sendToBackground({ kind: "revoke-settings-pass" })
+            }
+          >
+            Close preferences
+          </button>
+        </div>
       </section>
     </main>
   );

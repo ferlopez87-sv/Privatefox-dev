@@ -8,18 +8,27 @@ import { getState, setState } from "../shared/storage";
 import {
   ADDONS_PASS_TTL_MINUTES,
   EMAIL_CODE_TTL_MINUTES,
+  SETTINGS_PASS_TTL_MINUTES,
 } from "../shared/constants";
+import { surfaceLockScreen } from "./surface-lock";
 
 export async function lock(): Promise<void> {
   const state = await getState();
   // Locking before setup would be an unrecoverable lockout (no password
   // exists to unlock with), so the lock is a no-op until setup completes.
   if (!state.setupComplete) return;
-  // Locking always revokes an outstanding about:addons pass — otherwise a
-  // pass taken before locking would survive it.
-  if (!state.locked || state.addonsPassUntil !== null) {
-    await setState({ locked: true, addonsPassUntil: null });
-  }
+  // Locking always revokes outstanding passes — otherwise a pass taken
+  // before locking would survive it.
+  await setState({
+    locked: true,
+    addonsPassUntil: null,
+    settingsPassUntil: null,
+  });
+  // Persisting `locked` only draws the overlay on ordinary web pages; this
+  // puts the lock screen on surfaces the content script cannot reach.
+  // Unconditional (not just on a false -> true transition) so that a lock
+  // triggered while already locked still re-asserts a visible lock screen.
+  await surfaceLockScreen();
 }
 
 /**
@@ -46,6 +55,33 @@ export async function hasValidAddonsPass(): Promise<boolean> {
 
 export async function revokeAddonsPass(): Promise<void> {
   await setState({ addonsPassUntil: null });
+}
+
+/**
+ * Grant temporary access to the preferences page after verifying the
+ * password. Preferences are where the protections themselves are configured
+ * (idle timeout, policy toggles), so they get the same treatment as
+ * about:addons rather than being open to anyone at the keyboard.
+ */
+export async function grantSettingsPass(password: string): Promise<boolean> {
+  const state = await getState();
+  if (!state.passwordHash) return false;
+  const ok = await verifySecret(password, state.passwordHash);
+  if (!ok) return false;
+  await setState({
+    settingsPassUntil: Date.now() + SETTINGS_PASS_TTL_MINUTES * 60_000,
+  });
+  return true;
+}
+
+/** True while a granted preferences pass is still within its TTL. */
+export async function hasValidSettingsPass(): Promise<boolean> {
+  const { settingsPassUntil } = await getState();
+  return settingsPassUntil !== null && Date.now() < settingsPassUntil;
+}
+
+export async function revokeSettingsPass(): Promise<void> {
+  await setState({ settingsPassUntil: null });
 }
 
 export async function unlockWithPassword(password: string): Promise<boolean> {

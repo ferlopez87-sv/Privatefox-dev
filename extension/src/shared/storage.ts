@@ -34,6 +34,11 @@ export interface PrivatefoxState {
    * Null when no pass is active. Cleared on every lock.
    */
   addonsPassUntil: number | null;
+  /**
+   * Expiry (ms since epoch) of a password-granted pass into the preferences
+   * page. Null when no pass is active. Cleared on every lock.
+   */
+  settingsPassUntil: number | null;
   passwordHash: HashedSecret | null;
   recoveryHash: HashedSecret | null;
   /** Address the native host sends recovery emails to (empty = not configured). */
@@ -51,6 +56,7 @@ export const DEFAULT_STATE: PrivatefoxState = {
   blockPrivateBrowsing: DEFAULT_BLOCK_PRIVATE_BROWSING,
   blockAboutAddons: DEFAULT_BLOCK_ABOUT_ADDONS,
   addonsPassUntil: null,
+  settingsPassUntil: null,
   passwordHash: null,
   recoveryHash: null,
   recoveryEmail: "",

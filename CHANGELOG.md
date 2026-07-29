@@ -8,6 +8,30 @@ Firefox shows on the add-on card.
 The native host versions independently — it installs separately and only
 moves when the host itself changes.
 
+## 1.3.0
+
+### Fixed
+
+- **Locking now actually shows the lock screen.** Flipping the lock only
+  drew the overlay on ordinary web pages, because the content script cannot
+  run on extension pages, `about:` pages, or the window Firefox opens at
+  startup. The lock was in effect with nothing on screen. Any focused tab
+  that cannot host the overlay is now navigated to the lock page.
+  - This is why **Lock the browser now** in preferences looked broken: it
+    locked correctly, but the preferences tab it was clicked from could not
+    display anything.
+  - This is also why **no lock screen appeared at Firefox startup**:
+    `about:home` is not the new-tab override, so nothing was shown.
+- Locking while already locked now re-asserts the lock screen instead of
+  short-circuiting.
+
+### Added
+
+- **The preferences page requires the password.** Preferences are where the
+  protections are configured, so opening them now asks for the password and
+  grants a 5-minute pass, revoked as soon as the browser locks. A **Close
+  preferences** button ends the pass immediately.
+
 ## 1.2.0
 
 - Gate `about:addons` behind the password. Navigating there (and to

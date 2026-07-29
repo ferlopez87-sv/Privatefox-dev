@@ -52,6 +52,23 @@ Key invariants:
 - **Lock before setup is a no-op** — otherwise a fresh install with no
   password would soft-brick the browser.
 
+## Making the lock visible (surface-lock.ts)
+
+Persisting `locked: true` is only half the job. The content script draws the
+overlay on http/https/file pages, but it cannot run on extension pages, on
+`about:` pages, or on the window Firefox opens at startup (`about:home` is
+not the newtab override). On those the lock would be in force with nothing
+on screen — the failure that made the preferences "Lock now" button look
+dead and left startup showing no lock screen.
+
+So `lock()` ends by calling `surfaceLockScreen()`, which navigates every
+*focused* tab that cannot host the overlay to the extension's lock page.
+Background tabs are left alone (the user never sees them, and their content
+script asserts the overlay when they are next loaded), and a tab already
+showing the lock page is not re-navigated. It runs unconditionally, not just
+on a false→true transition, so a lock while already locked re-asserts a
+visible lock screen.
+
 ## The about:addons password gate
 
 Content scripts cannot run on `about:` pages, so `nav-guard.ts` watches

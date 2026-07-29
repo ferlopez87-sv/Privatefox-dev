@@ -31,6 +31,15 @@ export const EMAIL_CODE_TTL_MINUTES = 15;
 export const ADDONS_PASS_TTL_MINUTES = 5;
 
 /**
+ * How long the preferences page stays open after entering the password.
+ * Same reasoning as the about:addons pass: one visit, not a standing grant.
+ */
+export const SETTINGS_PASS_TTL_MINUTES = 5;
+
+/** The extension page used as the lock screen surface. */
+export const LOCK_PAGE_PATH = "src/newtab/index.html";
+
+/**
  * Whether about:addons is blocked outright by the enterprise policy
  * (BlockAboutAddons). When true the page is unreachable and the extension's
  * password gate never runs; when false the gate is what protects it.

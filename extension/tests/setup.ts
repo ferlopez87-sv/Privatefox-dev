@@ -7,13 +7,35 @@ import { beforeEach } from "vitest";
 
 type Listener = (...args: unknown[]) => void;
 
-export function makeFakeBrowser() {
+export interface FakeTab {
+  id: number;
+  url: string;
+  active: boolean;
+}
+
+export function makeFakeBrowser(tabs: FakeTab[] = []) {
   let store: Record<string, unknown> = {};
   const changedListeners: Listener[] = [];
+  /** Records navigations so tests can assert the lock screen was surfaced. */
+  const navigations: { tabId: number; url: string }[] = [];
 
   return {
     _reset() {
       store = {};
+    },
+    _tabs: tabs,
+    _navigations: navigations,
+    tabs: {
+      async query({ active }: { active?: boolean } = {}) {
+        return tabs.filter((t) => (active === undefined ? true : t.active));
+      },
+      async update(tabId: number, props: { url?: string }) {
+        if (props.url !== undefined) {
+          navigations.push({ tabId, url: props.url });
+          const tab = tabs.find((t) => t.id === tabId);
+          if (tab) tab.url = props.url;
+        }
+      },
     },
     storage: {
       local: {
@@ -42,6 +64,9 @@ export function makeFakeBrowser() {
     runtime: {
       async sendNativeMessage() {
         throw new Error("no native host in tests");
+      },
+      getURL(path: string) {
+        return `moz-extension://test/${path}`;
       },
     },
   };

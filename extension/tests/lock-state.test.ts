@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   completeSetup,
   grantAddonsPass,
+  grantSettingsPass,
   hasValidAddonsPass,
+  hasValidSettingsPass,
   issueEmailCode,
   lock,
   revokeAddonsPass,
@@ -129,6 +131,28 @@ describe("lock state machine", () => {
     // passwordHash is null until a new password is set — nothing to verify.
     expect(await grantAddonsPass("hunter22")).toBe(false);
     expect(await hasValidAddonsPass()).toBe(false);
+  });
+
+  it("preferences pass requires the password, expires, and dies on lock", async () => {
+    await completeSetup("hunter22");
+    expect(await hasValidSettingsPass()).toBe(false);
+
+    expect(await grantSettingsPass("wrong")).toBe(false);
+    expect(await hasValidSettingsPass()).toBe(false);
+
+    expect(await grantSettingsPass("hunter22")).toBe(true);
+    expect(await hasValidSettingsPass()).toBe(true);
+
+    await lock();
+    expect(await hasValidSettingsPass()).toBe(false);
+
+    // And it expires on its own after the TTL.
+    await unlockWithPassword("hunter22");
+    await grantSettingsPass("hunter22");
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 6 * 60_000);
+    expect(await hasValidSettingsPass()).toBe(false);
+    vi.useRealTimers();
   });
 
   it("email codes are one-time and expire", async () => {
