@@ -10,12 +10,27 @@ Privatefox is a **macOS-only Firefox extension that locks the user out of their 
 
 ## Required development workflow
 
-Every task in this repo — from a single-file fix to a full phase — follows four gates. A task is not done until all four are satisfied:
+Every task in this repo — from a single-file fix to a full phase — follows five gates. A task is not done until all five are satisfied:
 
 1. **Plan**: State the approach before touching files. For anything touching more than one file/module, or with more than one reasonable approach, use plan mode or otherwise get explicit direction before implementing.
 2. **Execute**: Implement per the architecture and conventions below. Don't unilaterally introduce new architecture (swapping the Vite plugin, changing the crypto scheme, adding a server component, changing the enforcement model) without flagging it first.
-3. **Test**: Run the applicable checks before calling anything done — `vitest` for logic in `shared/`, `web-ext lint`, and for anything touching lock-state/overlay/policy behavior, manual verification via `web-ext run`. Changes to policy/native-host behavior additionally require an actual restart against a real Firefox profile — this cannot be automated (see Risks).
-4. **Confirm final product**: State plainly what was verified and how. "Tests pass" is not sufficient on its own for a UI or behavioral change — say what you actually observed happen.
+3. **Version**: Bump the extension version — see below. Every change that reaches the user is a new version, no exceptions.
+4. **Test**: Run the applicable checks before calling anything done — `vitest` for logic in `shared/`, `web-ext lint`, and for anything touching lock-state/overlay/policy behavior, manual verification via `web-ext run`. Changes to policy/native-host behavior additionally require an actual restart against a real Firefox profile — this cannot be automated (see Risks).
+5. **Confirm final product**: State plainly what was verified and how. "Tests pass" is not sufficient on its own for a UI or behavioral change — say what you actually observed happen. State the new version number.
+
+## Versioning: every change ships a new version
+
+**Never hand the user a build that carries the same version as a previous one.** The user installs `.xpi`/`.zip` files manually and has no other way to tell two builds apart — a version that doesn't move makes it impossible to know whether a fix actually landed, and Firefox will not treat the package as an upgrade.
+
+`extension/package.json` is the single source of truth: `src/manifest.ts` reads `pkg.version`, so bumping that one field updates the manifest, the built `.xpi`, and what Firefox displays. Bump it **in the same commit as the change**, never as a follow-up.
+
+Semver, judged by what the user sees:
+
+- **Patch** (`1.2.0` → `1.2.1`) — bug fix, copy/style tweak, refactor with no behavior change, dependency bump.
+- **Minor** (`1.2.1` → `1.3.0`) — new user-visible capability (a new surface, a new preference, a new lock trigger).
+- **Major** (`1.3.0` → `2.0.0`) — a breaking change to stored state or the enforcement model: a storage shape that needs migration (bump `STORAGE_SCHEMA_VERSION` too), a changed native-messaging contract, or removing a protection users relied on.
+
+Record the change in `CHANGELOG.md` under the new version in the same commit. The native host (`native-host/package.json`) versions independently — bump it only when the host itself changes, since it ships and installs separately.
 
 ## Commands
 
