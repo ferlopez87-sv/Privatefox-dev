@@ -8,6 +8,13 @@ Privatefox is a **macOS-only Firefox extension that locks the user out of their 
 
 **Repository status: Phases 1–4 implemented** (core lock, options/idle/recovery, native host + policy installer, email recovery). Remaining: Phase 5 (Node SEA packaging, release polish) and real-Mac manual QA of the policy/native-host layer. Keep this file in sync as work lands.
 
+## Read these two files before starting non-trivial work
+
+- **`context.md`** — current project state, in-flight/uncommitted work, and anything a fresh session needs to resume without re-deriving it from git history or a conversation log. Read this first; update it whenever a session ends with something unfinished, and trim stale entries once that work lands (its content moves into this file, `CHANGELOG.md`, or the code itself).
+- **`feedback.md`** — a running log of mistakes and what they taught, not a changelog. Skim before touching an area it covers; add an entry whenever something ships broken and the user is the one who catches it, so the same class of bug doesn't repeat.
+
+Reading these first is cheaper than re-exploring the codebase from scratch every session — that's the point of keeping them current.
+
 ## Required development workflow
 
 Every task in this repo — from a single-file fix to a full phase — follows five gates. A task is not done until all five are satisfied:
