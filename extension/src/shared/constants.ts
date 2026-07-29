@@ -57,3 +57,15 @@ export const GATED_PAGES = [
 ] as const;
 
 export const STORAGE_SCHEMA_VERSION = 1;
+
+/**
+ * Force-grant this extension access to private/incognito windows via the
+ * ExtensionSettings.private_browsing enterprise policy, so usage stats also
+ * cover private windows without the user manually toggling "Run in Private
+ * Windows" in about:addons. Only meaningful when blockPrivateBrowsing is
+ * off — if private windows are blocked entirely there is nothing to grant
+ * access to. Enforced only once the native host has (re)written
+ * policies.json and Firefox has restarted, same caveat as the other two
+ * enterprise-policy-backed toggles.
+ */
+export const DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS = true;

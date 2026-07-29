@@ -2,6 +2,7 @@ import type { HashedSecret } from "./crypto";
 import {
   DEFAULT_BLOCK_ABOUT_ADDONS,
   DEFAULT_BLOCK_PRIVATE_BROWSING,
+  DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS,
   DEFAULT_IDLE_TIMEOUT_MINUTES,
   DEFAULT_WELCOME_MESSAGE,
   STORAGE_SCHEMA_VERSION,
@@ -29,6 +30,13 @@ export interface PrivatefoxState {
    * the page stays reachable but the extension's password gate guards it.
    */
   blockAboutAddons: boolean;
+  /**
+   * Force-grant this extension private-window access via the enterprise
+   * policy so usage stats also cover private windows. Only relevant if
+   * blockPrivateBrowsing is off. Enforced only once the native host has
+   * (re)written policies.json and Firefox has restarted.
+   */
+  grantPrivateBrowsingAccess: boolean;
   /**
    * Expiry (ms since epoch) of the pass granted by the settings password.
    * One pass covers every protected surface (Firefox preferences,
@@ -65,6 +73,7 @@ export const DEFAULT_STATE: PrivatefoxState = {
   idleTimeoutMinutes: DEFAULT_IDLE_TIMEOUT_MINUTES,
   blockPrivateBrowsing: DEFAULT_BLOCK_PRIVATE_BROWSING,
   blockAboutAddons: DEFAULT_BLOCK_ABOUT_ADDONS,
+  grantPrivateBrowsingAccess: DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS,
   settingsPassUntil: null,
   passwordHash: null,
   settingsPasswordHash: null,

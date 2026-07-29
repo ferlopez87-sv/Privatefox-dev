@@ -63,7 +63,16 @@ path is outside this git repo and specific to the sandbox container it was
 written in; it will not exist in a fresh session/container.** The design is
 therefore reproduced in full below so nothing is lost.
 
-### Progress so far (uncommitted in the working tree)
+### Progress so far
+
+Committed to `claude/claude-md-documentation-y27vhu` as an explicit WIP
+commit (message says so plainly) — **deliberately NOT fast-forwarded into
+`main`**, unlike every other completed change in this repo's history, since
+`main` only ever receives fully-tested/typechecked work and this doesn't
+typecheck yet (see "Known-broken state" below). If you're picking this back
+up: `git log` on the feature branch to find that commit, keep building on
+top of it, and only fast-forward `main` once the whole Phase 6 feature is
+complete and verified per usual.
 
 Done:
 - `extension/src/shared/domain.ts` — `extractTrackableDomain(url)`, complete.

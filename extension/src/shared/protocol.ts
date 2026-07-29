@@ -26,6 +26,13 @@ export type RuntimeRequest =
       newPassword: string;
     }
   | { kind: "clear-settings-password"; currentSettingsPassword: string }
+  /**
+   * Re-sends the current protection preferences (blockPrivateBrowsing,
+   * blockAboutAddons, grantPrivateBrowsingAccess) to the native host so it
+   * rewrites policies.json to match — otherwise these toggles only ever
+   * take effect from the one-time CLI installer's hardcoded defaults.
+   */
+  | { kind: "apply-policy" }
   | {
       kind: "set-password";
       currentPassword: string | null;
@@ -36,6 +43,7 @@ export type RuntimeRequest =
 export type RuntimeResponse =
   | { ok: true; locked: boolean }
   | { ok: true; recoveryCode: string }
+  | { ok: true; detail?: string }
   | { ok: false; error: string };
 
 // ---- Native messaging commands (background -> native host)
@@ -46,6 +54,7 @@ export type NativeCommand =
       xpiPath?: string;
       disablePrivateBrowsing?: boolean;
       blockAboutAddons?: boolean;
+      grantPrivateBrowsingAccess?: boolean;
     }
   | {
       command: "send-recovery-email";
