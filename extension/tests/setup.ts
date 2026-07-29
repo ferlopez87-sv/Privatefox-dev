@@ -7,6 +7,9 @@ import { beforeEach } from "vitest";
 
 type Listener = (...args: unknown[]) => void;
 
+/** Lets every pending promise chain in the guard settle before asserting. */
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 export interface FakeTab {
   id: number;
   url: string;
@@ -16,6 +19,8 @@ export interface FakeTab {
 export function makeFakeBrowser(tabs: FakeTab[] = []) {
   let store: Record<string, unknown> = {};
   const changedListeners: Listener[] = [];
+  const updatedListeners: Listener[] = [];
+  const createdListeners: Listener[] = [];
   /** Records navigations so tests can assert the lock screen was surfaced. */
   const navigations: { tabId: number; url: string }[] = [];
 
@@ -36,6 +41,29 @@ export function makeFakeBrowser(tabs: FakeTab[] = []) {
           if (tab) tab.url = props.url;
         }
       },
+      onUpdated: {
+        addListener(fn: Listener) {
+          updatedListeners.push(fn);
+        },
+      },
+      onCreated: {
+        addListener(fn: Listener) {
+          createdListeners.push(fn);
+        },
+      },
+    },
+    /** Simulates navigating an existing tab (changeInfo carries the URL). */
+    async _fireUpdated(tabId: number, url: string | undefined, tabUrl?: string) {
+      const changeInfo = url === undefined ? {} : { url };
+      for (const fn of updatedListeners) {
+        fn(tabId, changeInfo, { id: tabId, url: tabUrl ?? url });
+      }
+      await flush();
+    },
+    /** Simulates a tab opened straight onto a URL (no URL *change* fires). */
+    async _fireCreated(tab: { id: number; url: string }) {
+      for (const fn of createdListeners) fn(tab);
+      await flush();
     },
     storage: {
       local: {

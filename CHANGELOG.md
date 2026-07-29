@@ -8,6 +8,18 @@ Firefox shows on the add-on card.
 The native host versions independently — it installs separately and only
 moves when the host itself changes.
 
+## 1.4.1
+
+### Fixed
+
+- **`about:addons` still was not gated.** The `tabs` permission added in
+  1.4.0 was necessary but not sufficient: the listener only read
+  `changeInfo.url`, which reports a URL *change*. Both the Add-ons menu item
+  and Cmd+Shift+A open a **new tab already pointing at** `about:addons`, so
+  no change is ever reported and the guard saw nothing. It now also reads
+  the tab object's own URL and listens on `tabs.onCreated`. Covered by tests
+  that reproduce all three routes to the page.
+
 ## 1.4.0
 
 ### Fixed

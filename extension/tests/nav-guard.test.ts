@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { getManifest } from "../src/manifest";
-import { isGatedUrl } from "../src/background/nav-guard";
+import { isGatedUrl, registerNavGuard } from "../src/background/nav-guard";
 import { GATED_PAGES } from "../src/shared/constants";
+import { completeSetup, grantSettingsPass } from "../src/background/lock-state";
+import { makeFakeBrowser } from "./setup";
+
+const GATE = "moz-extension://test/src/gate/index.html";
+
+function install() {
+  const fake = makeFakeBrowser([]);
+  (globalThis as Record<string, unknown>).browser = fake;
+  registerNavGuard();
+  return fake;
+}
 
 describe("nav-guard manifest requirements", () => {
   /**
@@ -36,5 +47,90 @@ describe("isGatedUrl", () => {
     expect(isGatedUrl("https://example.com")).toBe(false);
     expect(isGatedUrl("about:blank")).toBe(false);
     expect(isGatedUrl("about:newtab")).toBe(false);
+  });
+});
+
+describe("gating about:addons", () => {
+  it("redirects a tab that navigates to about:addons", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+
+    await fake._fireUpdated(1, "about:addons");
+
+    expect(fake._navigations[0]?.url).toContain(GATE);
+    expect(fake._navigations[0]?.url).toContain("about%3Aaddons");
+  });
+
+  /**
+   * Regression test for 1.4.0. The Add-ons menu item and Cmd+Shift+A both
+   * open a NEW tab already pointing at about:addons, so no URL *change* is
+   * ever reported. Reading only changeInfo.url missed the most common route
+   * to the page and the gate never fired.
+   */
+  it("redirects a tab OPENED directly onto about:addons (no url change)", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+
+    // changeInfo carries no url; only the tab object knows where it points.
+    await fake._fireUpdated(2, undefined, "about:addons");
+
+    expect(fake._navigations[0]?.url).toContain(GATE);
+  });
+
+  it("redirects a newly created about:addons tab (tabs.onCreated)", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+
+    await fake._fireCreated({ id: 3, url: "about:addons" });
+
+    expect(fake._navigations[0]?.url).toContain(GATE);
+  });
+
+  it("gates about:preferences too", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+
+    await fake._fireUpdated(4, "about:preferences#privacy");
+
+    expect(fake._navigations[0]?.url).toContain(GATE);
+  });
+
+  it("lets it through while a settings pass is valid", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+    await grantSettingsPass("browsing-pw");
+
+    await fake._fireUpdated(5, "about:addons");
+
+    expect(fake._navigations).toEqual([]);
+  });
+
+  it("sends a locked browser to the lock screen, not the settings prompt", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+    const { lock } = await import("../src/background/lock-state");
+    await lock();
+    fake._navigations.length = 0;
+
+    await fake._fireUpdated(6, "about:addons");
+
+    expect(fake._navigations[0]?.url).toContain("src/newtab/index.html");
+  });
+
+  it("ignores ordinary navigation entirely", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+
+    await fake._fireUpdated(7, "https://example.com");
+
+    expect(fake._navigations).toEqual([]);
+  });
+
+  it("does nothing before setup completes", async () => {
+    const fake = install();
+
+    await fake._fireUpdated(8, "about:addons");
+
+    expect(fake._navigations).toEqual([]);
   });
 });
