@@ -10,6 +10,14 @@ export type NativeCommand =
       xpiPath?: string;
       disablePrivateBrowsing?: boolean;
       blockAboutAddons?: boolean;
+      /**
+       * When true, writes the `ExtensionSettings.<id>.private_browsing`
+       * policy key to grant this extension access to private/incognito
+       * windows — so the usage-stats tracker can also cover them.
+       * Only meaningful when disablePrivateBrowsing is false (if private
+       * windows are blocked entirely there is nothing to grant access to).
+       */
+      grantPrivateBrowsingAccess?: boolean;
     }
   | {
       command: "send-recovery-email";

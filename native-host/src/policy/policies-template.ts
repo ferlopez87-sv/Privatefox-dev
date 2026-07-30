@@ -12,6 +12,14 @@ export interface PolicyOptions {
    * protects it — a deliberate trade of hard blocking for usability.
    */
   blockAboutAddons?: boolean;
+  /**
+   * Grant this extension access to private/incognito windows by setting
+   * ExtensionSettings.<id>.private_browsing to true in the policy, so the
+   * usage-stats tracker can also cover private-window dwell time. Only
+   * meaningful when disablePrivateBrowsing is off — if private windows are
+   * blocked entirely there is nothing to grant access to.
+   */
+  grantPrivateBrowsingAccess?: boolean;
 }
 
 /**
@@ -31,15 +39,24 @@ export function buildPolicies(
   if (!xpiPath.startsWith("/")) {
     throw new Error(`xpiPath must be absolute, got: ${xpiPath}`);
   }
-  const { disablePrivateBrowsing = true, blockAboutAddons = true } = options;
+  const {
+    disablePrivateBrowsing = true,
+    blockAboutAddons = true,
+    grantPrivateBrowsingAccess,
+  } = options;
+  const extensionSettings: Record<string, unknown> = {
+    installation_mode: "force_installed",
+    install_url: `file://${xpiPath}`,
+    updates_disabled: true,
+  };
+  // Grant private-window access when requested and not blocked entirely.
+  if (grantPrivateBrowsingAccess && !disablePrivateBrowsing) {
+    extensionSettings["private_browsing"] = true;
+  }
   return {
     policies: {
       ExtensionSettings: {
-        [EXTENSION_ID]: {
-          installation_mode: "force_installed",
-          install_url: `file://${xpiPath}`,
-          updates_disabled: true,
-        },
+        [EXTENSION_ID]: extensionSettings,
       },
       ...(disablePrivateBrowsing ? { DisablePrivateBrowsing: true } : {}),
       ...(blockAboutAddons ? { BlockAboutAddons: true } : {}),

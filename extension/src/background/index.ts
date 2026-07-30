@@ -8,16 +8,20 @@
 import { registerRouter } from "./router";
 import { registerIdleListener, applyIdleTimeout } from "./idle-monitor";
 import { registerNavGuard } from "./nav-guard";
+import { registerStatsTracker } from "./stats-tracker";
 import { lock } from "./lock-state";
 import { getState } from "../shared/storage";
+import { recordOpen } from "../shared/stats-storage";
 
 registerRouter();
 registerIdleListener();
 registerNavGuard();
+registerStatsTracker();
 
 // Lock on every browser startup.
 browser.runtime.onStartup.addListener(() => {
   void lock();
+  void recordOpen();
 });
 
 // The toolbar button opens a status popup (action.default_popup); with a

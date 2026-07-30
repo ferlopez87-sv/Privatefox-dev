@@ -40,7 +40,14 @@ export type RuntimeRequest =
       currentPassword: string | null;
       newPassword: string;
     }
-  | { kind: "complete-setup"; password: string };
+  | { kind: "complete-setup"; password: string }
+  /**
+   * Ask the native host to re-write policies.json from the current state.
+   * The extension itself calls this when the user clicks "Apply policy now"
+   * in Options, but it is also exposed as a public RuntimeRequest so a
+   * fresh session can trigger it from anywhere during setup.
+   */
+  | { kind: "apply-policy" };
 
 export type RuntimeResponse =
   | { ok: true; locked: boolean }
@@ -56,6 +63,7 @@ export type NativeCommand =
       xpiPath?: string;
       disablePrivateBrowsing?: boolean;
       blockAboutAddons?: boolean;
+      grantPrivateBrowsingAccess?: boolean;
     }
   | {
       command: "send-recovery-email";

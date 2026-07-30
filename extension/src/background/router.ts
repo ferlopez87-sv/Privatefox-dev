@@ -117,6 +117,17 @@ async function handle(request: RuntimeRequest): Promise<RuntimeResponse> {
       await applyIdleTimeout();
       return { ok: true, recoveryCode };
     }
+    case "apply-policy": {
+      const current = await getState();
+      const result = await callNativeHost({
+        command: "install-policy",
+        disablePrivateBrowsing: current.blockPrivateBrowsing,
+        blockAboutAddons: current.blockAboutAddons,
+        grantPrivateBrowsingAccess: current.grantPrivateBrowsingAccess,
+      });
+      if (!result.ok) return result as RuntimeResponse;
+      return { ok: true, detail: result.detail ?? "Policy applied." } as RuntimeResponse;
+    }
   }
 }
 

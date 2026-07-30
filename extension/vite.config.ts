@@ -11,7 +11,11 @@ export default defineConfig({
       useDynamicUrlWebAccessibleResources: false,
       // Pages reached only via runtime.getURL (not from the manifest).
       additionalInputs: {
-        html: ["src/setup/index.html", "src/gate/index.html"],
+        html: [
+          "src/setup/index.html",
+          "src/gate/index.html",
+          "src/dashboard/index.html",
+        ],
       },
     }),
   ],

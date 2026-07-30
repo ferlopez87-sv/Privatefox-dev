@@ -9,6 +9,7 @@ export async function dispatch(message: unknown): Promise<NativeResult> {
       return installPolicy(cmd.xpiPath, {
         disablePrivateBrowsing: cmd.disablePrivateBrowsing,
         blockAboutAddons: cmd.blockAboutAddons,
+        grantPrivateBrowsingAccess: cmd.grantPrivateBrowsingAccess,
       });
     case "send-recovery-email":
       return sendRecoveryEmail(cmd.to, cmd.code, cmd.expiresMinutes);

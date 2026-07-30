@@ -10,6 +10,7 @@ import {
   SETTINGS_PASS_TTL_MINUTES,
 } from "../shared/constants";
 import { surfaceLockScreen } from "./surface-lock";
+import { recordUnlockStat } from "../shared/stats-storage";
 
 export async function lock(): Promise<void> {
   const state = await getState();
@@ -140,7 +141,10 @@ export async function unlockWithPassword(password: string): Promise<boolean> {
   const state = await getState();
   if (!state.passwordHash) return false;
   const ok = await verifySecret(password, state.passwordHash);
-  if (ok) await setState({ locked: false });
+  if (ok) {
+    await setState({ locked: false });
+    void recordUnlockStat();
+  }
   return ok;
 }
 
@@ -167,6 +171,7 @@ export async function unlockWithRecoveryCode(
     settingsPassUntil: null,
     recoveryHash: await hashSecret(newCode),
   });
+  void recordUnlockStat();
   return newCode;
 }
 
@@ -196,6 +201,7 @@ export async function unlockWithEmailCode(code: string): Promise<boolean> {
     settingsPassUntil: null,
     emailCode: null,
   });
+  void recordUnlockStat();
   return true;
 }
 

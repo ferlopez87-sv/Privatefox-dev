@@ -20,6 +20,13 @@ function openPreferences() {
   window.close();
 }
 
+function openDashboard() {
+  void browser.tabs.create({
+    url: browser.runtime.getURL("src/dashboard/index.html"),
+  });
+  window.close();
+}
+
 function App() {
   const state = usePrivatefoxState();
   if (!state) return null;
@@ -71,6 +78,11 @@ function App() {
         )}
         <button class="secondary" onClick={openPreferences}>
           Preferences
+        </button>
+      </div>
+      <div class="row">
+        <button class="secondary" onClick={openDashboard}>
+          Usage stats
         </button>
       </div>
     </main>

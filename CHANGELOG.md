@@ -8,6 +8,40 @@ Firefox shows on the add-on card.
 The native host versions independently — it installs separately and only
 moves when the host itself changes.
 
+## 1.6.0
+
+### Added
+
+- **Local usage statistics dashboard.** A new dashboard page tracks browser
+  opens, unlocks, and time spent per domain while unlocked — entirely local,
+  never sent anywhere. Accessed from the popup toolbar card and from Options.
+  - Opens, unlocks, and per-domain dwell time recorded in per-day buckets.
+  - 30-day retention, auto-pruned. Lifetime open/unlock counters never
+    pruned.
+  - Domain-only granularity (no path/query/URL), with `www.` stripped.
+  - Private-window tracking supported behind the native host's
+    `grantPrivateBrowsingAccess` policy toggle.
+  - Dashboard is gated by the same settings-password mechanism as Options.
+- **SettingsGate extracted to a shared component** (`src/ui/settings-gate.tsx`)
+  so both Options and the new Dashboard can reuse it.
+- **Apply policy now** button in Options → Protection that tells the native
+  host to rewrite `policies.json` from the current preferences immediately
+  (fixes the long-standing gap where `blockPrivateBrowsing`,
+  `blockAboutAddons`, and `grantPrivateBrowsingAccess` toggles had no
+  active call site connecting them to the native host).
+- **`grantPrivateBrowsingAccess`** preference and policy option: grants the
+  extension private-window access via the enterprise policy key
+  `ExtensionSettings.<id>.private_browsing` so dwell-time statistics also
+  cover private windows.
+
+### Changed
+
+- `recordOpen()` is now called on every `runtime.onStartup` alongside
+  `lock()`.
+- `recordUnlockStat()` is called on every successful unlock (password,
+  recovery code, email code).
+- Version bump from 1.5.0 → 1.6.0 (new user-visible capability).
+
 ## 1.5.0
 
 ### Fixed

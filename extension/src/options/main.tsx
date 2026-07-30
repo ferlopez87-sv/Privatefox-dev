@@ -1,6 +1,7 @@
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { usePrivatefoxState, sendToBackground } from "../ui/state";
+import { SettingsGate, useNow } from "../ui/settings-gate";
 import { setState as patchState } from "../shared/storage";
 import {
   SETTINGS_PASS_TTL_MINUTES,
@@ -87,12 +88,15 @@ function isSafeRedirectUrl(url: string): boolean {
 function ProtectionSettings(props: {
   blockPrivateBrowsing: boolean;
   blockAboutAddons: boolean;
+  grantPrivateBrowsingAccess: boolean;
   postGateRedirectUrl: string;
 }) {
   const [blocked, setBlocked] = useState(props.blockPrivateBrowsing);
   const [addonsBlocked, setAddonsBlocked] = useState(props.blockAboutAddons);
+  const [grantAccess, setGrantAccess] = useState(props.grantPrivateBrowsingAccess);
   const [redirectUrl, setRedirectUrl] = useState(props.postGateRedirectUrl);
   const [redirectError, setRedirectError] = useState("");
+  const [policyResult, setPolicyResult] = useState("");
   const [status, setStatus] = useState("");
 
   useEffect(
@@ -102,6 +106,10 @@ function ProtectionSettings(props: {
   useEffect(
     () => setAddonsBlocked(props.blockAboutAddons),
     [props.blockAboutAddons],
+  );
+  useEffect(
+    () => setGrantAccess(props.grantPrivateBrowsingAccess),
+    [props.grantPrivateBrowsingAccess],
   );
   useEffect(
     () => setRedirectUrl(props.postGateRedirectUrl),
@@ -122,6 +130,17 @@ function ProtectionSettings(props: {
     setRedirectError("");
     await patchState({ postGateRedirectUrl: trimmed });
     saved();
+  };
+
+  const applyPolicy = async () => {
+    setPolicyResult("");
+    const res = await sendToBackground({ kind: "apply-policy" }) as { ok: true; detail?: string } | { ok: false; error: string };
+    if (res.ok) {
+      setPolicyResult(res.detail ?? "Policy applied. Restart Firefox for it to take effect.");
+    } else {
+      setPolicyResult(res.error);
+    }
+    setTimeout(() => setPolicyResult(""), 5000);
   };
 
   return (
@@ -166,6 +185,25 @@ function ProtectionSettings(props: {
         The password gate works today, with or without the native host.
       </p>
 
+      <label class="toggle">
+        <input
+          type="checkbox"
+          checked={grantAccess}
+          disabled={blocked}
+          onChange={(e) => {
+            const value = (e.target as HTMLInputElement).checked;
+            setGrantAccess(value);
+            void patchState({ grantPrivateBrowsingAccess: value }).then(saved);
+          }}
+        />
+        <span>Grant private-window access for stats</span>
+      </label>
+      <p class="hint">
+        Lets Privatefox track time spent in private windows for usage
+        statistics. Only takes effect when private browsing is not blocked,
+        the native host is installed, and Firefox is restarted.
+      </p>
+
       <label>After entering the settings password, go to</label>
       <input
         type="text"
@@ -181,6 +219,13 @@ function ProtectionSettings(props: {
       <button class="secondary" onClick={() => void saveRedirectUrl()}>
         Save redirect
       </button>
+
+      <div class="row" style="margin-top: 0.75rem">
+        <button class="secondary" onClick={() => void applyPolicy()}>
+          Apply policy now
+        </button>
+      </div>
+      <div class="success">{policyResult}</div>
 
       <div class="success">{status}</div>
     </section>
@@ -266,156 +311,7 @@ function PasswordSettings(props: { hasPassword: boolean }) {
   );
 }
 
-/**
- * Recovery-code entry shown when "Forgot settings password?" is clicked
- * from the gate. Clears only the settings password (see
- * resetSettingsPasswordWithRecoveryCode) — the browsing password is
- * untouched, since this is for someone already unlocked who is just locked
- * out of preferences. The code is one-time, so a rotated replacement is
- * shown once before returning to the normal password prompt.
- */
-function SettingsPasswordRecovery(props: { onDone: () => void }) {
-  const [code, setCode] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [newRecoveryCode, setNewRecoveryCode] = useState<string | null>(null);
 
-  const submit = async (event: Event) => {
-    event.preventDefault();
-    if (!code || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const res = await sendToBackground({
-        kind: "reset-settings-password-with-recovery-code",
-        code,
-      });
-      if (!res.ok) {
-        setError(res.error);
-        setCode("");
-        return;
-      }
-      if ("recoveryCode" in res) setNewRecoveryCode(res.recoveryCode);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (newRecoveryCode) {
-    return (
-      <main class="centered">
-        <h1>Settings password removed</h1>
-        <p class="message">
-          Your settings password was cleared — your browser password now
-          opens preferences again, where you can set a new one. Your
-          recovery code was rotated; the new one is shown{" "}
-          <strong>one time only</strong>. Store it somewhere safe.
-        </p>
-        <div class="code">{newRecoveryCode}</div>
-        <button onClick={props.onDone}>Continue to preferences</button>
-      </main>
-    );
-  }
-
-  return (
-    <main class="centered">
-      <h1>Reset settings password</h1>
-      <p class="message">
-        Enter your <strong>recovery code</strong> to clear the settings
-        password. This does not touch your browser password or lock state.
-      </p>
-      <form class="row" onSubmit={submit}>
-        <input
-          type="text"
-          placeholder="Recovery code"
-          value={code}
-          autocomplete="off"
-          // eslint-disable-next-line jsx-a11y/no-autofocus
-          autofocus
-          onInput={(e) => setCode((e.target as HTMLInputElement).value)}
-        />
-        <button type="submit" disabled={busy}>
-          Reset
-        </button>
-      </form>
-      <div class="error">{error}</div>
-      <p>
-        <span class="link" onClick={props.onDone}>
-          Back to password entry
-        </span>
-      </p>
-    </main>
-  );
-}
-
-/**
- * Password prompt shown before the preferences themselves. Preferences are
- * where the protections are configured, so leaving them open would let
- * anyone at an unlocked browser just turn the lock off.
- */
-function SettingsGate() {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [recovering, setRecovering] = useState(false);
-
-  const submit = async (event: Event) => {
-    event.preventDefault();
-    if (!password || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const res = await sendToBackground({
-        kind: "settings-access-attempt",
-        password,
-      });
-      // On success the state change re-renders this page with the settings;
-      // no navigation needed.
-      if (!res.ok) setError(res.error);
-      setPassword("");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (recovering) {
-    return <SettingsPasswordRecovery onDone={() => setRecovering(false)} />;
-  }
-
-  return (
-    <main class="centered">
-      <h1>Password required</h1>
-      <p class="message">
-        Enter your <strong>settings password</strong> to open Privatefox
-        preferences.
-      </p>
-      <form class="row" onSubmit={submit}>
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          autocomplete="off"
-          // eslint-disable-next-line jsx-a11y/no-autofocus
-          autofocus
-          onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
-        />
-        <button type="submit" disabled={busy}>
-          Continue
-        </button>
-      </form>
-      <div class="error">{error}</div>
-      <p class="hint">
-        Preferences stay open for {SETTINGS_PASS_TTL_MINUTES} minutes, and
-        close as soon as the browser locks.
-      </p>
-      <p>
-        <span class="link" onClick={() => setRecovering(true)}>
-          Forgot settings password?
-        </span>
-      </p>
-    </main>
-  );
-}
 
 /**
  * The second password: guards Firefox preferences, about:addons and this
@@ -545,26 +441,6 @@ function SettingsPasswordSettings(props: { hasSettingsPassword: boolean }) {
   );
 }
 
-/**
- * Returns a timestamp that refreshes when `deadline` passes, so a pass
- * expiring while the page sits open actually closes it instead of leaving
- * the settings on screen until some other state change repaints.
- */
-function useNow(deadline: number | null): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (deadline === null) return;
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) {
-      setNow(Date.now());
-      return;
-    }
-    const timer = setTimeout(() => setNow(Date.now()), remaining + 50);
-    return () => clearTimeout(timer);
-  }, [deadline]);
-  return now;
-}
-
 function App() {
   const state = usePrivatefoxState();
   // Hooks must run unconditionally, so this sits above the early returns.
@@ -610,6 +486,7 @@ function App() {
       <ProtectionSettings
         blockPrivateBrowsing={state.blockPrivateBrowsing}
         blockAboutAddons={state.blockAboutAddons}
+        grantPrivateBrowsingAccess={state.grantPrivateBrowsingAccess}
         postGateRedirectUrl={state.postGateRedirectUrl}
       />
       <PasswordSettings hasPassword={state.passwordHash !== null} />
@@ -634,6 +511,24 @@ function App() {
             Close preferences
           </button>
         </div>
+      </section>
+
+      <section>
+        <h2>Usage statistics</h2>
+        <p class="hint">
+          Track opens, unlocks, and time spent per domain — entirely local,
+          never sent anywhere.{" "}
+          <span
+            class="link"
+            onClick={() =>
+              void browser.tabs.create({
+                url: browser.runtime.getURL("src/dashboard/index.html"),
+              })
+            }
+          >
+            Open dashboard
+          </span>
+        </p>
       </section>
     </main>
   );
