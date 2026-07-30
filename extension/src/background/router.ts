@@ -7,6 +7,7 @@ import {
   grantSettingsPass,
   issueEmailCode,
   lock,
+  resetSettingsPasswordWithRecoveryCode,
   revokeSettingsPass,
   setPassword,
   setSettingsPassword,
@@ -86,6 +87,15 @@ async function handle(request: RuntimeRequest): Promise<RuntimeResponse> {
       );
       if (!result.ok) return result;
       return { ok: true, locked: (await getState()).locked };
+    }
+    case "reset-settings-password-with-recovery-code": {
+      const newCode = await resetSettingsPasswordWithRecoveryCode(
+        request.code,
+      );
+      if (newCode === null) {
+        return { ok: false, error: "Invalid recovery code." };
+      }
+      return { ok: true, recoveryCode: newCode };
     }
     case "set-password": {
       const result = await setPassword(

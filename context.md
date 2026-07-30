@@ -15,9 +15,11 @@ lessons learned.
   on GitHub's default (`main`) view. Keep doing this after every push unless
   told otherwise.
 - Shipped extension version (both branches, as of the last commit): see
-  `extension/package.json` — was **1.4.1** as of this writing. Bump-per-change
-  discipline is mandatory (see CLAUDE.md's Versioning section) — check
-  `CHANGELOG.md` for the true latest before assuming this number is current.
+  `extension/package.json` — was **1.5.0** as of this writing (fixed no way
+  to reset a forgotten settings password; added a configurable post-gate
+  redirect). Bump-per-change discipline is mandatory (see CLAUDE.md's
+  Versioning section) — check `CHANGELOG.md` for the true latest before
+  assuming this number is current.
 - Native host versions independently (`native-host/package.json`), only
   when the host itself changes.
 
@@ -66,30 +68,37 @@ therefore reproduced in full below so nothing is lost.
 ### Progress so far
 
 Committed to `claude/claude-md-documentation-y27vhu` as an explicit WIP
-commit (message says so plainly) — **deliberately NOT fast-forwarded into
-`main`**, unlike every other completed change in this repo's history, since
-`main` only ever receives fully-tested/typechecked work and this doesn't
-typecheck yet (see "Known-broken state" below). If you're picking this back
-up: `git log` on the feature branch to find that commit, keep building on
-top of it, and only fast-forward `main` once the whole Phase 6 feature is
-complete and verified per usual.
+commit — **deliberately NOT fast-forwarded into `main`**, unlike every other
+completed change in this repo's history, since `main` only ever receives
+fully-tested/typechecked work. If you're picking this back up: `git log` on
+the feature branch to find that commit, keep building on top of it, and
+only fast-forward `main` once the whole Phase 6 feature is complete and
+verified per usual.
 
-Done:
+**Update**: the `{kind:"apply-policy"}` `RuntimeRequest` variant and the
+`grantPrivateBrowsingAccess` field on the `install-policy` `NativeCommand`
+(both listed as "done" in the original WIP commit) were **reverted** in the
+1.5.0 session, in both `extension/src/shared/protocol.ts` and
+`native-host/src/protocol.ts` — they were unused (nothing called
+`apply-policy`, no native-host command consumed the extra field) and were
+making `npm run typecheck` fail on an unrelated bug-fix release. Re-add them
+when Phase 6 actually resumes; the design for them is unchanged, just
+reproduced below and not currently in the code.
+
+Done and still in the tree:
 - `extension/src/shared/domain.ts` — `extractTrackableDomain(url)`, complete.
 - `extension/src/shared/stats-storage.ts` — full `privatefoxStats` module
   (`getStats`/`setStats`/`recordOpen`/`recordUnlockStat`/`recordDwellTime`/
   `pruneStats`/`aggregateDomainTotals`), complete.
-- `extension/src/shared/constants.ts` — added
+- `extension/src/shared/constants.ts` — has
   `DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS`.
-- `extension/src/shared/storage.ts` — added `grantPrivateBrowsingAccess`
-  field + default.
-- `extension/src/shared/protocol.ts` — added `{ kind: "apply-policy" }`
-  `RuntimeRequest`, `{ ok: true; detail?: string }` `RuntimeResponse`
-  variant, and `grantPrivateBrowsingAccess?: boolean` on the `install-policy`
-  `NativeCommand`.
-- `native-host/src/protocol.ts` — mirrored the same `NativeCommand` field.
+- `extension/src/shared/storage.ts` — has `grantPrivateBrowsingAccess`
+  field + default (present in `PrivatefoxState`, unused by any UI yet).
 
 **Not started yet** (see full plan below for exact shape):
+- `extension/src/shared/protocol.ts` / `native-host/src/protocol.ts` — need
+  the `apply-policy` `RuntimeRequest` and `NativeCommand` field re-added
+  (see "Update" above — they existed once and were reverted).
 - `native-host/src/policy/policies-template.ts` — `PolicyOptions` needs
   `grantPrivateBrowsingAccess?: boolean`, `buildPolicies` needs to emit
   `ExtensionSettings[EXTENSION_ID].private_browsing: true`.
@@ -123,13 +132,17 @@ Done:
   documented in feedback.md (nothing currently calls install-policy from a
   running browser at all).
 - `extension/src/ui/settings-gate.tsx` — extract the `SettingsGate`
-  component currently private to `extension/src/options/main.tsx` so the
-  new dashboard can reuse it.
+  component (still private to `extension/src/options/main.tsx` as of 1.5.0
+  — it grew a "Forgot settings password?" sub-flow in that release, so
+  extract the updated version, not the original) so the new dashboard can
+  reuse it.
 - `extension/src/options/main.tsx` — new checkbox for
   `grantPrivateBrowsingAccess` in `ProtectionSettings` (with copy noting it
-  only matters if `blockPrivateBrowsing` is off), an "Apply policy now"
-  button that sends `{kind: "apply-policy"}`, a link to the new dashboard,
-  and switch to the extracted `SettingsGate`.
+  only matters if `blockPrivateBrowsing` is off; note `ProtectionSettings`
+  also gained a `postGateRedirectUrl` field in 1.5.0, so place the new
+  checkbox alongside it, not instead of it), an "Apply policy now" button
+  that sends `{kind: "apply-policy"}`, a link to the new dashboard, and
+  switch to the extracted `SettingsGate`.
 - `extension/src/dashboard/{index.html,main.tsx,use-stats.ts}` — not
   created. New standalone page, gated by the same settings-password
   mechanism as Options.
@@ -228,20 +241,13 @@ that reflects the stored preferences plus a static restart reminder (a
 WebExtension has no API to introspect whether `policies.json` is actually
 active — don't overstate this as a live check).
 
-### Known-broken state right now (expected, not a regression)
+### Current typecheck state
 
-`extension/`'s `npm run typecheck` currently fails with:
-```
-src/background/router.ts(20,49): error TS2366: Function lacks ending
-return statement and return type does not include 'undefined'.
-```
-This is because `shared/protocol.ts` already declares the new
-`{kind:"apply-policy"}` `RuntimeRequest` variant, but `router.ts`'s switch
-doesn't have a case for it yet (TypeScript's exhaustiveness check on the
-discriminated union is what's firing). All 61 existing vitest tests still
-pass — nothing shipped is broken, this is exactly the incomplete state
-described above. Fixed by adding the `"apply-policy"` case described in
-"Not started yet."
+Clean as of 1.5.0 — the `apply-policy`-related revert above means there's no
+known-broken state to work around anymore. When `apply-policy` is re-added
+to `shared/protocol.ts`, remember to add its `router.ts` case in the same
+change (last time, adding the protocol variant without the router case is
+exactly what broke `npm run typecheck` for a while).
 
 ### Verification still needed once complete
 

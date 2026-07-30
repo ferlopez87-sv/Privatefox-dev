@@ -102,6 +102,30 @@ export async function clearSettingsPassword(
   return { ok: true };
 }
 
+/**
+ * Forgot-settings-password path: proves identity with the recovery code and
+ * clears ONLY the settings password (not the browsing password or lock
+ * state) — for someone who is already unlocked and just locked out of
+ * preferences, not someone who forgot how to unlock the browser. Rotates
+ * the recovery code like every other use of it, since it's one-time by
+ * design. Returns the new recovery code, or null if the code was wrong.
+ */
+export async function resetSettingsPasswordWithRecoveryCode(
+  code: string,
+): Promise<string | null> {
+  const state = await getState();
+  if (!state.recoveryHash) return null;
+  const ok = await verifySecret(normalizeRecoveryCode(code), state.recoveryHash);
+  if (!ok) return null;
+  const newCode = generateRecoveryCode();
+  await setState({
+    settingsPasswordHash: null,
+    settingsPassUntil: null,
+    recoveryHash: await hashSecret(newCode),
+  });
+  return newCode;
+}
+
 /** True while a granted preferences pass is still within its TTL. */
 export async function hasValidSettingsPass(): Promise<boolean> {
   const { settingsPassUntil } = await getState();

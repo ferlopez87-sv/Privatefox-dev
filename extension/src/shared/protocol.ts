@@ -27,12 +27,14 @@ export type RuntimeRequest =
     }
   | { kind: "clear-settings-password"; currentSettingsPassword: string }
   /**
-   * Re-sends the current protection preferences (blockPrivateBrowsing,
-   * blockAboutAddons, grantPrivateBrowsingAccess) to the native host so it
-   * rewrites policies.json to match — otherwise these toggles only ever
-   * take effect from the one-time CLI installer's hardcoded defaults.
+   * Forgot-settings-password path: proves identity with the recovery code
+   * (the same one-time code used for full account recovery) and clears
+   * ONLY settingsPasswordHash — the browsing password and lock state are
+   * left untouched, since this is for someone who is already unlocked and
+   * just locked out of preferences. Rotates the recovery code like every
+   * other use of it.
    */
-  | { kind: "apply-policy" }
+  | { kind: "reset-settings-password-with-recovery-code"; code: string }
   | {
       kind: "set-password";
       currentPassword: string | null;
@@ -54,7 +56,6 @@ export type NativeCommand =
       xpiPath?: string;
       disablePrivateBrowsing?: boolean;
       blockAboutAddons?: boolean;
-      grantPrivateBrowsingAccess?: boolean;
     }
   | {
       command: "send-recovery-email";

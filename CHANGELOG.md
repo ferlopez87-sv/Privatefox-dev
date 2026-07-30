@@ -8,6 +8,28 @@ Firefox shows on the add-on card.
 The native host versions independently — it installs separately and only
 moves when the host itself changes.
 
+## 1.5.0
+
+### Fixed
+
+- **No way to reset a forgotten settings password.** Once a settings
+  password was set, the browser password stopped working on that prompt (by
+  design), but there was no "forgot password" path there at all — the only
+  way back in was the full-account recovery flow on the lock screen, which
+  also wipes the browser password. Options → Password required now has a
+  **Forgot settings password?** link that accepts the recovery code and
+  clears only the settings password, leaving the browser password and lock
+  state untouched. Like every other use of the recovery code, it rotates —
+  the new one is shown once.
+
+### Added
+
+- **Configurable redirect after the settings-password gate.** Options →
+  Protection has a new "After entering the settings password, go to" field.
+  Set, it sends you there instead of the page you actually requested
+  (`about:addons`, `about:preferences`, ...) after a correct password; left
+  blank, behavior is unchanged. Applies to every password-gated page.
+
 ## 1.4.1
 
 ### Fixed

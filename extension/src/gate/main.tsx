@@ -1,13 +1,14 @@
 import { render } from "preact";
 import { useState } from "preact/hooks";
-import { sendToBackground } from "../ui/state";
+import { sendToBackground, usePrivatefoxState } from "../ui/state";
 import { SETTINGS_PASS_TTL_MINUTES, GATED_PAGES } from "../shared/constants";
 import "../ui/styles.css";
 
 /**
  * Password gate shown when navigation to about:addons (or a sibling page) is
  * intercepted by nav-guard. Entering the password grants a short-lived pass
- * and forwards the tab to the requested page.
+ * and forwards the tab to postGateRedirectUrl if the user configured one
+ * (Options -> Protection), otherwise to the page that was actually requested.
  */
 
 /**
@@ -22,6 +23,7 @@ function safeTarget(): string {
 
 function App() {
   const target = safeTarget();
+  const state = usePrivatefoxState();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,8 +43,10 @@ function App() {
         setPassword("");
         return;
       }
-      // Pass granted: nav-guard now lets this navigation through.
-      location.replace(target);
+      // Pass granted: nav-guard now lets this navigation through. Go to the
+      // configured redirect if the user set one, otherwise the page that
+      // was actually requested.
+      location.replace(state?.postGateRedirectUrl || target);
     } finally {
       setBusy(false);
     }
@@ -55,6 +59,12 @@ function App() {
         <code>{target}</code> is protected by Privatefox. Enter your{" "}
         <strong>settings password</strong> to continue.
       </p>
+      {state?.postGateRedirectUrl && (
+        <p class="hint">
+          You'll be sent to <code>{state.postGateRedirectUrl}</code> instead
+          (configured in Options → Protection).
+        </p>
+      )}
       <form class="row" onSubmit={submit}>
         <input
           type="password"

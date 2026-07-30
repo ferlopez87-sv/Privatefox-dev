@@ -31,6 +31,16 @@ export interface PrivatefoxState {
    */
   blockAboutAddons: boolean;
   /**
+   * Where the settings-password gate (src/gate/) sends the tab after a
+   * correct password, instead of the page that was actually requested
+   * (about:addons, about:preferences, ...). Empty means "go to the
+   * requested page" — the original behavior. A basic scheme check keeps
+   * out javascript:/data: URLs; nothing else is restricted, since this
+   * only runs after successful authentication and the destination is the
+   * user's own choice, not untrusted input.
+   */
+  postGateRedirectUrl: string;
+  /**
    * Force-grant this extension private-window access via the enterprise
    * policy so usage stats also cover private windows. Only relevant if
    * blockPrivateBrowsing is off. Enforced only once the native host has
@@ -73,6 +83,7 @@ export const DEFAULT_STATE: PrivatefoxState = {
   idleTimeoutMinutes: DEFAULT_IDLE_TIMEOUT_MINUTES,
   blockPrivateBrowsing: DEFAULT_BLOCK_PRIVATE_BROWSING,
   blockAboutAddons: DEFAULT_BLOCK_ABOUT_ADDONS,
+  postGateRedirectUrl: "",
   grantPrivateBrowsingAccess: DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS,
   settingsPassUntil: null,
   passwordHash: null,

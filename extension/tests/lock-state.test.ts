@@ -6,6 +6,7 @@ import {
   hasValidSettingsPass,
   issueEmailCode,
   lock,
+  resetSettingsPasswordWithRecoveryCode,
   revokeSettingsPass,
   setPassword,
   setSettingsPassword,
@@ -205,6 +206,39 @@ describe("lock state machine", () => {
     expect((await clearSettingsPassword("wrong")).ok).toBe(false);
     expect((await clearSettingsPassword("settings-pw")).ok).toBe(true);
     expect(await grantSettingsPass("browsing-pw")).toBe(true);
+  });
+
+  it("resets a forgotten settings password with the recovery code, leaving browsing untouched", async () => {
+    const code = await completeSetup("browsing-pw");
+    await setSettingsPassword("browsing-pw", "settings-pw");
+    // The bug this fixes: once a settings password exists, there was no
+    // way back in if you forgot it short of the full-account recovery flow.
+    expect(await grantSettingsPass("browsing-pw")).toBe(false);
+
+    expect(
+      await resetSettingsPasswordWithRecoveryCode("WRONG-CODES-WRONG-CODES-WRONG"),
+    ).toBeNull();
+
+    const newCode = await resetSettingsPasswordWithRecoveryCode(code);
+    expect(newCode).not.toBeNull();
+    expect(newCode).not.toBe(code);
+
+    const state = await getState();
+    expect(state.settingsPasswordHash).toBeNull();
+    expect(state.settingsPassUntil).toBeNull();
+    // Browsing password and lock state are untouched — this is not a
+    // full-account recovery.
+    expect(state.passwordHash).not.toBeNull();
+    expect(state.locked).toBe(false);
+    expect(await unlockWithPassword("browsing-pw")).toBe(true);
+    // The fallback to the browsing password works again for settings too.
+    expect(await grantSettingsPass("browsing-pw")).toBe(true);
+
+    // The old recovery code is dead; the rotated one works.
+    expect(await resetSettingsPasswordWithRecoveryCode(code)).toBeNull();
+    expect(
+      await resetSettingsPasswordWithRecoveryCode(newCode!.toLowerCase()),
+    ).not.toBeNull();
   });
 
   it("recovery clears BOTH passwords (the way back if you forget either)", async () => {

@@ -10,7 +10,6 @@ export type NativeCommand =
       xpiPath?: string;
       disablePrivateBrowsing?: boolean;
       blockAboutAddons?: boolean;
-      grantPrivateBrowsingAccess?: boolean;
     }
   | {
       command: "send-recovery-email";

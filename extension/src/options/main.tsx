@@ -78,12 +78,21 @@ function GeneralSettings(props: {
  * enforced by the extension alone — they take effect only once the Privatefox
  * native host has (re)written policies.json and Firefox has been restarted.
  */
+/** Rejects only schemes that could do something surprising once landed on. */
+function isSafeRedirectUrl(url: string): boolean {
+  const trimmed = url.trim().toLowerCase();
+  return !trimmed.startsWith("javascript:") && !trimmed.startsWith("data:");
+}
+
 function ProtectionSettings(props: {
   blockPrivateBrowsing: boolean;
   blockAboutAddons: boolean;
+  postGateRedirectUrl: string;
 }) {
   const [blocked, setBlocked] = useState(props.blockPrivateBrowsing);
   const [addonsBlocked, setAddonsBlocked] = useState(props.blockAboutAddons);
+  const [redirectUrl, setRedirectUrl] = useState(props.postGateRedirectUrl);
+  const [redirectError, setRedirectError] = useState("");
   const [status, setStatus] = useState("");
 
   useEffect(
@@ -94,10 +103,25 @@ function ProtectionSettings(props: {
     () => setAddonsBlocked(props.blockAboutAddons),
     [props.blockAboutAddons],
   );
+  useEffect(
+    () => setRedirectUrl(props.postGateRedirectUrl),
+    [props.postGateRedirectUrl],
+  );
 
   const saved = () => {
     setStatus("Saved.");
     setTimeout(() => setStatus(""), 2000);
+  };
+
+  const saveRedirectUrl = async () => {
+    const trimmed = redirectUrl.trim();
+    if (trimmed && !isSafeRedirectUrl(trimmed)) {
+      setRedirectError("That URL scheme isn't allowed.");
+      return;
+    }
+    setRedirectError("");
+    await patchState({ postGateRedirectUrl: trimmed });
+    saved();
   };
 
   return (
@@ -141,6 +165,23 @@ function ProtectionSettings(props: {
         opening it ({SETTINGS_PASS_TTL_MINUTES}-minute access, revoked on lock).
         The password gate works today, with or without the native host.
       </p>
+
+      <label>After entering the settings password, go to</label>
+      <input
+        type="text"
+        placeholder="Leave blank to open the requested page (e.g. about:addons)"
+        value={redirectUrl}
+        onInput={(e) => setRedirectUrl((e.target as HTMLInputElement).value)}
+      />
+      <p class="hint">
+        Applies to about:addons and every other password-gated page. Blank
+        means go straight to whatever page was requested, as before.
+      </p>
+      <div class="error">{redirectError}</div>
+      <button class="secondary" onClick={() => void saveRedirectUrl()}>
+        Save redirect
+      </button>
+
       <div class="success">{status}</div>
     </section>
   );
@@ -226,6 +267,88 @@ function PasswordSettings(props: { hasPassword: boolean }) {
 }
 
 /**
+ * Recovery-code entry shown when "Forgot settings password?" is clicked
+ * from the gate. Clears only the settings password (see
+ * resetSettingsPasswordWithRecoveryCode) — the browsing password is
+ * untouched, since this is for someone already unlocked who is just locked
+ * out of preferences. The code is one-time, so a rotated replacement is
+ * shown once before returning to the normal password prompt.
+ */
+function SettingsPasswordRecovery(props: { onDone: () => void }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [newRecoveryCode, setNewRecoveryCode] = useState<string | null>(null);
+
+  const submit = async (event: Event) => {
+    event.preventDefault();
+    if (!code || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await sendToBackground({
+        kind: "reset-settings-password-with-recovery-code",
+        code,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        setCode("");
+        return;
+      }
+      if ("recoveryCode" in res) setNewRecoveryCode(res.recoveryCode);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (newRecoveryCode) {
+    return (
+      <main class="centered">
+        <h1>Settings password removed</h1>
+        <p class="message">
+          Your settings password was cleared — your browser password now
+          opens preferences again, where you can set a new one. Your
+          recovery code was rotated; the new one is shown{" "}
+          <strong>one time only</strong>. Store it somewhere safe.
+        </p>
+        <div class="code">{newRecoveryCode}</div>
+        <button onClick={props.onDone}>Continue to preferences</button>
+      </main>
+    );
+  }
+
+  return (
+    <main class="centered">
+      <h1>Reset settings password</h1>
+      <p class="message">
+        Enter your <strong>recovery code</strong> to clear the settings
+        password. This does not touch your browser password or lock state.
+      </p>
+      <form class="row" onSubmit={submit}>
+        <input
+          type="text"
+          placeholder="Recovery code"
+          value={code}
+          autocomplete="off"
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autofocus
+          onInput={(e) => setCode((e.target as HTMLInputElement).value)}
+        />
+        <button type="submit" disabled={busy}>
+          Reset
+        </button>
+      </form>
+      <div class="error">{error}</div>
+      <p>
+        <span class="link" onClick={props.onDone}>
+          Back to password entry
+        </span>
+      </p>
+    </main>
+  );
+}
+
+/**
  * Password prompt shown before the preferences themselves. Preferences are
  * where the protections are configured, so leaving them open would let
  * anyone at an unlocked browser just turn the lock off.
@@ -234,6 +357,7 @@ function SettingsGate() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [recovering, setRecovering] = useState(false);
 
   const submit = async (event: Event) => {
     event.preventDefault();
@@ -253,6 +377,10 @@ function SettingsGate() {
       setBusy(false);
     }
   };
+
+  if (recovering) {
+    return <SettingsPasswordRecovery onDone={() => setRecovering(false)} />;
+  }
 
   return (
     <main class="centered">
@@ -279,6 +407,11 @@ function SettingsGate() {
       <p class="hint">
         Preferences stay open for {SETTINGS_PASS_TTL_MINUTES} minutes, and
         close as soon as the browser locks.
+      </p>
+      <p>
+        <span class="link" onClick={() => setRecovering(true)}>
+          Forgot settings password?
+        </span>
       </p>
     </main>
   );
@@ -402,8 +535,11 @@ function SettingsPasswordSettings(props: { hasSettingsPassword: boolean }) {
         </div>
       </form>
       <p class="hint">
-        If you forget it, the recovery code or an emailed code clears both
-        passwords and forces a reset.
+        Forgot it? Use "Forgot settings password?" on that prompt with your
+        recovery code — it clears only this password, leaving your browser
+        password and lock state untouched. (The recovery code or an emailed
+        code from the lock screen still work too, but those reset
+        everything, including your browser password.)
       </p>
     </section>
   );
@@ -474,6 +610,7 @@ function App() {
       <ProtectionSettings
         blockPrivateBrowsing={state.blockPrivateBrowsing}
         blockAboutAddons={state.blockAboutAddons}
+        postGateRedirectUrl={state.postGateRedirectUrl}
       />
       <PasswordSettings hasPassword={state.passwordHash !== null} />
       <SettingsPasswordSettings
