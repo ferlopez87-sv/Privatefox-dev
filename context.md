@@ -6,6 +6,69 @@ this file whenever a work session ends with something unfinished, or when a
 fact here goes stale. This is state, not process — see `feedback.md` for
 lessons learned.
 
+## Start here — resuming toward v1.6 (Phase 6: stats, dashboard, panic mode)
+
+If you are a fresh agent picking this up cold, do these in order before
+writing any code:
+
+1. **Read `CLAUDE.md` fully first**, then `feedback.md`, then this whole
+   file — in that order. `CLAUDE.md` has the architecture and the mandatory
+   5-gate workflow (Plan → Execute → Version → Test → Confirm); `feedback.md`
+   has the mistakes already made in this exact feature area (the
+   `about:addons` gate shipped broken twice, a preference that was never
+   wired to anything) so you don't repeat them.
+2. **Check out the feature branch and confirm where it actually is**:
+   ```sh
+   git checkout claude/claude-md-documentation-y27vhu
+   git log --oneline -5
+   node -e "console.log(require('./extension/package.json').version)"
+   ```
+   The version number and latest commits may have moved since this file was
+   last edited — trust the repo over this document if they disagree, and
+   update this file to match once you notice drift.
+3. **Verify the two unresolved external facts before building on top of
+   them** — both are called out inline below with a ⚠, but doing them first
+   avoids designing further pieces around a guess:
+   - The exact Mozilla `ExtensionSettings.<id>.private_browsing` policy key
+     name (see "Native host plumbing" below).
+   - Whether Firefox's manifest needs an `"incognito"` field at all (Chrome's
+     model doesn't map directly).
+4. **Build in this order** — later pieces depend on earlier ones:
+   1. Re-add the `apply-policy` `RuntimeRequest`/`NativeCommand` plumbing
+      (extension protocol, native-host protocol mirror, `router.ts` case,
+      native-host `policies-template.ts`/`install-policy.ts`/`commands/index.ts`,
+      `native-host/tests/policy.test.ts`) — see "Progress so far" and
+      "Native host plumbing" below for the exact shape. This closes the
+      loop the stats/panic private-browsing coverage both depend on.
+   2. `extension/src/background/stats-tracker.ts` + the two counter call
+      sites — see "Tab/window tracking" and "Counter call sites" below.
+   3. Extract `SettingsGate` out of `extension/src/options/main.tsx` into
+      `extension/src/ui/settings-gate.tsx` (grab the *current* version — it
+      grew a "Forgot settings password?" sub-flow in 1.5.0, don't extract an
+      older copy from memory). Both the dashboard and the panic screen need it.
+   4. The dashboard (`extension/src/dashboard/`) — see "Dashboard" below.
+   5. Panic mode — see the "Also planned: panic mode" section below in full;
+      it reuses the extracted `SettingsGate` and the `useNow(deadline)` hook
+      already in `options/main.tsx`.
+5. **Before calling it done**: bump `extension/package.json` to `1.6.0`
+   (this is new user-visible capability, not a patch), add the
+   `CHANGELOG.md` entry, update `CLAUDE.md`/`docs/ARCHITECTURE.md`/
+   `docs/THREAT-MODEL.md` per the notes in "Progress so far" below, then run
+   the full verification gate: `npm test` and `npm run typecheck` in both
+   `extension/` and `native-host/`, `npm run build`, `npm run lint`. Do not
+   skip `npm audit` (see `feedback.md` — it was skipped once, silently
+   accumulating 18 vulnerabilities before being caught).
+6. **Commit on the feature branch, push, then fast-forward `main` to match**
+   (established pattern — the user views the repo on GitHub's default
+   branch). Then `cd extension && npm run package` and hand the built
+   `.zip` to the user directly (`SendUserFile`) rather than asking them to
+   build it locally — see "Working style established with this user" below.
+7. **State plainly what you verified and what still needs a real Mac** —
+   several items in "Verification still needed" and the panic-mode section
+   cannot be exercised in a sandbox (private-window behavior, a background-
+   page suspend, a full Firefox restart after a policy change). Say so
+   explicitly rather than implying full coverage.
+
 ## Repository
 
 - GitHub: `ferlopez87-sv/Privatefox-dev`.
