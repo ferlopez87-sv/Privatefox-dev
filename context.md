@@ -262,3 +262,99 @@ exactly what broke `npm run typecheck` for a while).
   tracking actually works after native host install + restart; confirm
   dwell time survives a background-page suspend; confirm 30-day pruning;
   confirm the dashboard's settings gate behaves like Options.
+
+## Also planned: panic mode (requested, not started, exact version TBD)
+
+Requested alongside Phase 6: a "panic button" that, for **10 minutes**,
+blocks `about:addons` (and the sibling gated pages) and private browsing
+**with no password able to bypass it at all** — not even a correct settings
+password. Distinct from `lock()`: it does not lock ordinary browsing, only
+these two specific surfaces.
+
+**Known constraint, flagged to the user already**: a WebExtension cannot
+block private browsing outright — that's only possible via the
+`DisablePrivateBrowsing` enterprise policy, which needs `policies.json`
+rewritten **and a full Firefox restart** to take effect. That rules out a
+real instant/timed block. The honest, implementable substitute: **auto-close
+any private window opened during the panic window**, via
+`browser.windows.onCreated` checking `window.incognito` and calling
+`browser.windows.remove(window.id)` immediately. This only works if the
+extension already has private-window access granted (same
+`grantPrivateBrowsingAccess`/native-host prerequisite as the stats feature)
+— without that, panic mode's private-browsing enforcement is a no-op, and
+the UI must say so honestly rather than claim it's blocked. **Verify
+whether closing/inspecting windows needs anything beyond the `tabs`
+permission already granted** — flag for confirmation before shipping, same
+discipline as the `private_browsing` policy key above.
+
+### Design sketch
+
+**New state field**, `extension/src/shared/storage.ts`:
+```ts
+/** ms epoch; null = not in panic mode. Overrides settingsPassUntil while active. */
+panicUntil: number | null;
+```
+Default `null`. New constant `PANIC_MODE_MINUTES = 10` in `shared/constants.ts`
+(hardcoded per the user's spec — no UI to configure the duration, at least
+not initially).
+
+**Trigger**: a "Panic" button in the popup (`src/popup/main.tsx`, one click,
+no navigation needed — matches the "emergency" framing) and a status/
+re-trigger affordance in Options. Sends `{kind: "activate-panic-mode"}`.
+`lock-state.ts` gets:
+```ts
+export async function activatePanicMode(): Promise<void> {
+  await setState({
+    panicUntil: Date.now() + PANIC_MODE_MINUTES * 60_000,
+    settingsPassUntil: null, // revoke any pass already granted, mid-session
+  });
+  // sweep: close any private window already open at activation time
+  // (browser.windows.getAll({windowTypes:["normal"]}) filtered on .incognito)
+}
+export function hasActivePanic(state): boolean {
+  return state.panicUntil !== null && Date.now() < state.panicUntil;
+}
+```
+No timer needed to "end" it — same wall-clock-deadline convention already
+used for `settingsPassUntil`/`addonsPassUntil` (`Date.now() < storedUntil`,
+checked lazily wherever it matters, not an active countdown).
+
+**Enforcement points, all overriding the normal settings-password flow**:
+1. `background/nav-guard.ts`'s `guardTab()` — check `hasActivePanic()`
+   *first*, before the existing `locked` check and before
+   `hasValidSettingsPass()`. If active, redirect to a new
+   `src/panic/index.html` page (no password field at all — just "Panic mode
+   active until HH:MM:SS, no password will work" and a link back to
+   `about:newtab`) instead of `src/gate/`.
+2. `background/lock-state.ts`'s `grantSettingsPass()` — reject outright
+   (return `false`) whenever `hasActivePanic()` is true, regardless of
+   whether the password is correct. This is defense-in-depth against
+   someone bypassing the UI redirect by sending the `settings-access-attempt`
+   runtime message directly (e.g. from the background console) — matches
+   this repo's existing "not a hard boundary, but don't make it trivial"
+   posture (see `docs/THREAT-MODEL.md`).
+3. `extension/src/options/main.tsx`'s `App()` — check `state.panicUntil`
+   before rendering `SettingsGate`; if active, render the same panic screen
+   instead (Options is one of the protected surfaces already, so it gets
+   the same treatment as `about:addons`/`about:preferences` for consistency
+   — "no password works on any protected surface during panic," not just
+   the one the user happened to name).
+4. `background/index.ts` (new listener) — `browser.windows.onCreated`,
+   checking `hasActivePanic()` and `window.incognito`, closing the window
+   immediately if both are true. Register alongside the other synchronous
+   `register*()` calls.
+
+**New file**: `extension/src/panic/{index.html,main.tsx}` — same shape as
+`src/gate/`, but no form, just a countdown-ish status message and a link
+back to `about:newtab`. Consider reusing `useNow(deadline)` from
+`options/main.tsx` (already does exactly this "re-render when a wall-clock
+deadline passes" job) — worth extracting alongside `SettingsGate` when that
+extraction happens for the dashboard.
+
+**Tests to add**: `grantSettingsPass` rejects a correct password during
+active panic; `nav-guard` redirects to the panic page (not the gate) while
+active, and to the gate again once `panicUntil` has passed; a fake
+`browser.windows.onCreated` firing closes an incognito window while panic
+is active and leaves it alone once it isn't (needs the fake browser harness
+in `tests/setup.ts` extended with a minimal `windows` mock, similar to how
+`tabs.onCreated` was added for the `about:addons` fix in 1.4.1).
