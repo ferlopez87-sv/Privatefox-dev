@@ -8,6 +8,30 @@ Firefox shows on the add-on card.
 The native host versions independently — it installs separately and only
 moves when the host itself changes.
 
+## 1.7.0
+
+### Added
+
+- **Panic mode.** A "Panic" button in the toolbar popup (and an activation
+  button in Options) blocks the protected surfaces — Firefox preferences,
+  `about:addons`, and Privatefox options — for 10 minutes so that **no
+  password can open them, not even the correct one**. The settings-password
+  gate is replaced by a panic page with no password field at all, and any
+  pass already granted is revoked at activation.
+  - Triggers: popup "Panic mode" button, Options → Panic mode → "Activate
+    panic mode now".
+  - Private windows opened during the window are closed immediately. Honest
+    limitation: this only works when the extension has private-window access
+    granted (native host + `grantPrivateBrowsingAccess` + Firefox restart);
+    without it, private windows are outside what a WebExtension can see, and
+    the panic screen says so rather than claiming a hard block.
+  - Ends on a wall-clock deadline (10 minutes), like the settings-pass TTL —
+    no timer, and the UI re-renders when it passes.
+  - Defense-in-depth: `grantSettingsPass` itself refuses a correct password
+    during panic, so bypassing the UI redirect via direct runtime messages
+    doesn't work either.
+- Version bump from 1.6.0 → 1.7.0 (new user-visible capability).
+
 ## 1.6.0
 
 ### Added

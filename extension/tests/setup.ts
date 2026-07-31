@@ -21,15 +21,22 @@ export function makeFakeBrowser(tabs: FakeTab[] = []) {
   const changedListeners: Listener[] = [];
   const updatedListeners: Listener[] = [];
   const createdListeners: Listener[] = [];
+  const windowCreatedListeners: Listener[] = [];
   /** Records navigations so tests can assert the lock screen was surfaced. */
   const navigations: { tabId: number; url: string }[] = [];
+  /** Records window removals (panic mode closing private windows). */
+  const removedWindows: number[] = [];
+  let windows: { id: number; incognito: boolean }[] = [];
 
   return {
     _reset() {
       store = {};
+      windows = [];
     },
     _tabs: tabs,
     _navigations: navigations,
+    _removedWindows: removedWindows,
+    _windows: windows,
     tabs: {
       async query({ active }: { active?: boolean } = {}) {
         return tabs.filter((t) => (active === undefined ? true : t.active));
@@ -89,6 +96,27 @@ export function makeFakeBrowser(tabs: FakeTab[] = []) {
       setDetectionInterval() {},
       onStateChanged: { addListener() {} },
     },
+    windows: {
+      WINDOW_ID_NONE: -1,
+      async getAll() {
+        return windows;
+      },
+      async remove(id: number) {
+        removedWindows.push(id);
+        windows = windows.filter((w) => w.id !== id);
+      },
+      onCreated: {
+        addListener(fn: Listener) {
+          windowCreatedListeners.push(fn);
+        },
+      },
+    },
+    /** Simulates a window being opened (panic mode closes incognito ones). */
+    async _fireWindowCreated(window: { id: number; incognito: boolean }) {
+      windows.push(window);
+      for (const fn of windowCreatedListeners) fn(window);
+      await flush();
+    },
     runtime: {
       async sendNativeMessage() {
         throw new Error("no native host in tests");
@@ -96,6 +124,9 @@ export function makeFakeBrowser(tabs: FakeTab[] = []) {
       getURL(path: string) {
         return `moz-extension://test/${path}`;
       },
+      onStartup: { addListener() {} },
+      onInstalled: { addListener() {} },
+      onMessage: { addListener() {} },
     },
   };
 }

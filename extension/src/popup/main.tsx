@@ -27,6 +27,11 @@ function openDashboard() {
   window.close();
 }
 
+function activatePanic() {
+  void sendToBackground({ kind: "activate-panic-mode" });
+  window.close();
+}
+
 function App() {
   const state = usePrivatefoxState();
   if (!state) return null;
@@ -83,6 +88,11 @@ function App() {
       <div class="row">
         <button class="secondary" onClick={openDashboard}>
           Usage stats
+        </button>
+      </div>
+      <div class="row">
+        <button class="panic" onClick={activatePanic}>
+          Panic mode ({state.panicUntil !== null && Date.now() < state.panicUntil ? "active" : "10 min"})
         </button>
       </div>
     </main>

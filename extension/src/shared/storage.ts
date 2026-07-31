@@ -54,6 +54,14 @@ export interface PrivatefoxState {
    * and cleared on every lock.
    */
   settingsPassUntil: number | null;
+  /**
+   * Expiry (ms since epoch) of active panic mode; null when inactive.
+   * While set and in the future, NO password can open the protected
+   * surfaces (settings password, browsing password, recovery) — nav-guard
+   * redirects to the panic page instead of the gate, and grantSettingsPass
+   * rejects outright. Overrides settingsPassUntil while active.
+   */
+  panicUntil: number | null;
   /** Unlocks the browser. Typed often, so it lives in muscle memory. */
   passwordHash: HashedSecret | null;
   /**
@@ -86,6 +94,7 @@ export const DEFAULT_STATE: PrivatefoxState = {
   postGateRedirectUrl: "",
   grantPrivateBrowsingAccess: DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS,
   settingsPassUntil: null,
+  panicUntil: null,
   passwordHash: null,
   settingsPasswordHash: null,
   recoveryHash: null,

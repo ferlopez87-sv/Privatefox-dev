@@ -45,6 +45,7 @@ button {
   white-space: nowrap;
 }
 button.secondary { background: #2b2a33; color: #fbfbfe; border: 1px solid #5b5b66; }
+button.panic { background: #ff9aa2; color: #15141a; border: 1px solid #ff9aa2; }
 button:disabled { opacity: 0.5; cursor: default; }
 .error { color: #ff9aa2; min-height: 1.25rem; font-size: 0.9rem; }
 .success { color: #9aff9a; min-height: 1.25rem; font-size: 0.9rem; }

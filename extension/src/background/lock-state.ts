@@ -4,13 +4,58 @@ import {
   generateRecoveryCode,
   normalizeRecoveryCode,
 } from "../shared/recovery-code";
-import { getState, setState } from "../shared/storage";
+import { getState, setState, type PrivatefoxState } from "../shared/storage";
 import {
   EMAIL_CODE_TTL_MINUTES,
+  PANIC_MODE_MINUTES,
   SETTINGS_PASS_TTL_MINUTES,
 } from "../shared/constants";
 import { surfaceLockScreen } from "./surface-lock";
 import { recordUnlockStat } from "../shared/stats-storage";
+
+/** True while panic mode is active (wall-clock deadline, like settingsPassUntil). */
+export function hasActivePanic(state: PrivatefoxState): boolean {
+  return state.panicUntil !== null && Date.now() < state.panicUntil;
+}
+
+/**
+ * Emergency trigger: blocks the protected surfaces (about:addons,
+ * about:preferences, options) so that no password — not even the correct
+ * settings password — can open them, and closes any private window already
+ * open. Revokes any pass already granted so nothing survives mid-session.
+ */
+export async function activatePanicMode(): Promise<void> {
+  await setState({
+    panicUntil: Date.now() + PANIC_MODE_MINUTES * 60_000,
+    settingsPassUntil: null,
+  });
+  // Sweep private windows open at activation time. Only works when the
+  // extension actually has private-window access (native host + restart).
+  const windows = await browser.windows.getAll({ windowTypes: ["normal"] });
+  for (const win of windows) {
+    if (win.incognito && win.id !== undefined) {
+      await browser.windows.remove(win.id);
+    }
+  }
+}
+
+/**
+ * Closes an incognito window immediately while panic mode is active; no-op
+ * otherwise. Backs the windows.onCreated listener in background/index.ts,
+ * kept as a small explicit function so the behavior is unit-testable.
+ * Honest caveat: without private-window access granted (native host +
+ * restart) Firefox never hands a WebExtension an incognito window at all,
+ * so this can silently no-op — the panic UI says so rather than claiming
+ * a hard block.
+ */
+export async function maybeCloseIncognitoWindow(window: {
+  incognito?: boolean;
+  id?: number;
+}): Promise<void> {
+  if (!window.incognito || window.id === undefined) return;
+  if (!hasActivePanic(await getState())) return;
+  await browser.windows.remove(window.id);
+}
 
 export async function lock(): Promise<void> {
   const state = await getState();
@@ -49,6 +94,10 @@ async function verifySettingsSecret(candidate: string): Promise<boolean> {
  * password. One pass covers all of them and is revoked on lock.
  */
 export async function grantSettingsPass(password: string): Promise<boolean> {
+  // Panic mode overrides everything: even the correct password is refused,
+  // so a panic can't be undone by unlocking a surface the UI redirects
+  // around (defense-in-depth against direct runtime-message calls too).
+  if (hasActivePanic(await getState())) return false;
   if (!(await verifySettingsSecret(password))) return false;
   await setState({
     settingsPassUntil: Date.now() + SETTINGS_PASS_TTL_MINUTES * 60_000,

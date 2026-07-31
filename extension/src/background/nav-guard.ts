@@ -1,6 +1,6 @@
 import { getState } from "../shared/storage";
 import { GATED_PAGES, LOCK_PAGE_PATH } from "../shared/constants";
-import { hasValidSettingsPass } from "./lock-state";
+import { hasActivePanic, hasValidSettingsPass } from "./lock-state";
 
 /**
  * Password gate for about:addons (and sibling escape hatches).
@@ -10,6 +10,13 @@ import { hasValidSettingsPass } from "./lock-state";
  * updates and steering away. Navigation is redirected to an extension-owned
  * gate page that asks for the settings password; entering it grants a
  * short-lived pass (see grantSettingsPass) and the tab is sent to the target.
+ *
+ * Panic mode overrides the gate: while active, the redirect goes to the
+ * panic page instead — a screen with no password field at all, so no
+ * password can open the surface. (The locked check runs first: a locked
+ * browser shows the lock screen, which already blocks everything; sending a
+ * locked user to the panic page would be a lock bypass, since that page
+ * links straight back to ordinary browsing.)
  *
  * Two things this must get right, both of which have already broken it once:
  *
@@ -28,6 +35,10 @@ import { hasValidSettingsPass } from "./lock-state";
 
 export function gateUrlFor(target: string): string {
   return `${browser.runtime.getURL("src/gate/index.html")}?target=${encodeURIComponent(target)}`;
+}
+
+export function panicUrlFor(): string {
+  return browser.runtime.getURL("src/panic/index.html");
 }
 
 export function isGatedUrl(url: string): boolean {
@@ -51,6 +62,13 @@ async function guardTab(
       await browser.tabs.update(tabId, {
         url: browser.runtime.getURL(LOCK_PAGE_PATH),
       });
+      return;
+    }
+    // Panic mode: no password is accepted for the protected surfaces, so
+    // the gate page (which takes a password) is replaced by the panic page
+    // (which takes none and cannot be dismissed early).
+    if (hasActivePanic(state)) {
+      await browser.tabs.update(tabId, { url: panicUrlFor() });
       return;
     }
     if (await hasValidSettingsPass()) return;

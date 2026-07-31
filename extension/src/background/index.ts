@@ -9,7 +9,7 @@ import { registerRouter } from "./router";
 import { registerIdleListener, applyIdleTimeout } from "./idle-monitor";
 import { registerNavGuard } from "./nav-guard";
 import { registerStatsTracker } from "./stats-tracker";
-import { lock } from "./lock-state";
+import { lock, maybeCloseIncognitoWindow } from "./lock-state";
 import { getState } from "../shared/storage";
 import { recordOpen } from "../shared/stats-storage";
 
@@ -44,6 +44,15 @@ browser.runtime.onInstalled.addListener((details) => {
 browser.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   void applyIdleTimeout();
+});
+
+// Panic mode: any private window opened during the window is closed at
+// once. Honest caveat — this only works if the extension has private-window
+// access granted (grantPrivateBrowsingAccess via the native host + restart);
+// without that, private windows are simply outside what a WebExtension can
+// see, and the panic UI says so rather than claiming a hard block.
+browser.windows.onCreated.addListener((window) => {
+  void maybeCloseIncognitoWindow(window);
 });
 
 // Re-apply the idle detection interval on every background wake (the

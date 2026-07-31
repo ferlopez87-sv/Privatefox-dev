@@ -47,7 +47,14 @@ export type RuntimeRequest =
    * in Options, but it is also exposed as a public RuntimeRequest so a
    * fresh session can trigger it from anywhere during setup.
    */
-  | { kind: "apply-policy" };
+  | { kind: "apply-policy" }
+  /**
+   * Emergency "panic button": for a hardcoded window no password — not even
+   * a correct one — can open any protected surface (about:addons,
+   * about:preferences, options). Any private window opened while active is
+   * closed immediately. See lock-state's activatePanicMode.
+   */
+  | { kind: "activate-panic-mode" };
 
 export type RuntimeResponse =
   | { ok: true; locked: boolean }

@@ -2,6 +2,7 @@ import type { RuntimeRequest, RuntimeResponse } from "../shared/protocol";
 import { getState, setState } from "../shared/storage";
 import { EMAIL_CODE_TTL_MINUTES } from "../shared/constants";
 import {
+  activatePanicMode,
   clearSettingsPassword,
   completeSetup,
   grantSettingsPass,
@@ -127,6 +128,10 @@ async function handle(request: RuntimeRequest): Promise<RuntimeResponse> {
       });
       if (!result.ok) return result as RuntimeResponse;
       return { ok: true, detail: result.detail ?? "Policy applied." } as RuntimeResponse;
+    }
+    case "activate-panic-mode": {
+      await activatePanicMode();
+      return { ok: true, locked: (await getState()).locked };
     }
   }
 }

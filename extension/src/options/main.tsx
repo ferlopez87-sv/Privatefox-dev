@@ -4,6 +4,7 @@ import { usePrivatefoxState, sendToBackground } from "../ui/state";
 import { SettingsGate, useNow } from "../ui/settings-gate";
 import { setState as patchState } from "../shared/storage";
 import {
+  PANIC_MODE_MINUTES,
   SETTINGS_PASS_TTL_MINUTES,
 } from "../shared/constants";
 import "../ui/styles.css";
@@ -441,14 +442,44 @@ function SettingsPasswordSettings(props: { hasSettingsPassword: boolean }) {
   );
 }
 
+function PanicScreen(props: { until: number }) {
+  const remaining = Math.max(0, Math.ceil((props.until - Date.now()) / 1000));
+  const min = Math.floor(remaining / 60);
+  const sec = remaining % 60;
+
+  return (
+    <main class="centered">
+      <h1>Panic mode active</h1>
+      <p class="message">
+        For the next {min}:{String(sec).padStart(2, "0")} no password will
+        open Firefox preferences, about:addons, or these options — not even
+        the correct one.
+      </p>
+      <p>
+        <span
+          class="link"
+          onClick={() =>
+            void browser.tabs.create({ url: "about:newtab" })
+          }
+        >
+          Back to browsing
+        </span>
+      </p>
+    </main>
+  );
+}
+
 function App() {
   const state = usePrivatefoxState();
   // Hooks must run unconditionally, so this sits above the early returns.
   const now = useNow(state?.settingsPassUntil ?? null);
+  const panicNow = useNow(state?.panicUntil ?? null);
   if (!state) return null;
 
   const passValid =
     state.settingsPassUntil !== null && now < state.settingsPassUntil;
+  const panicActive =
+    state.panicUntil !== null && panicNow < state.panicUntil;
 
   if (!state.setupComplete) {
     return (
@@ -470,6 +501,10 @@ function App() {
       </main>
     );
   }
+
+  // Panic overrides even a valid pass — the whole point is that no
+  // password, correct or not, can reach these surfaces during the window.
+  if (panicActive) return <PanicScreen until={state.panicUntil!} />;
 
   // The pass expires on a wall-clock deadline, so re-check when it passes
   // rather than leaving the settings on screen until something else changes.
@@ -509,6 +544,25 @@ function App() {
             }
           >
             Close preferences
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Panic mode</h2>
+        <p class="hint">
+          Emergency: for {PANIC_MODE_MINUTES} minutes no password can open
+          the protected surfaces (not even the correct one), and private
+          windows opened during the window are closed automatically.
+        </p>
+        <div class="row">
+          <button
+            class="secondary"
+            onClick={() =>
+              void sendToBackground({ kind: "activate-panic-mode" })
+            }
+          >
+            Activate panic mode now
           </button>
         </div>
       </section>

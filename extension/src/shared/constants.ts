@@ -69,3 +69,9 @@ export const STORAGE_SCHEMA_VERSION = 1;
  * enterprise-policy-backed toggles.
  */
 export const DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS = true;
+
+/**
+ * How long panic mode stays active once triggered, in minutes. Hardcoded
+ * per the user's spec — there is deliberately no UI to change the duration.
+ */
+export const PANIC_MODE_MINUTES = 10;

@@ -1,11 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getManifest } from "../src/manifest";
 import { isGatedUrl, registerNavGuard } from "../src/background/nav-guard";
 import { GATED_PAGES } from "../src/shared/constants";
-import { completeSetup, grantSettingsPass } from "../src/background/lock-state";
+import {
+  activatePanicMode,
+  completeSetup,
+  grantSettingsPass,
+} from "../src/background/lock-state";
 import { makeFakeBrowser } from "./setup";
 
 const GATE = "moz-extension://test/src/gate/index.html";
+const PANIC = "moz-extension://test/src/panic/index.html";
 
 function install() {
   const fake = makeFakeBrowser([]);
@@ -132,5 +137,54 @@ describe("gating about:addons", () => {
     await fake._fireUpdated(8, "about:addons");
 
     expect(fake._navigations).toEqual([]);
+  });
+});
+
+describe("panic mode gating", () => {
+  it("redirects to the PANIC page, not the gate, while panic is active", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+    await activatePanicMode();
+
+    await fake._fireUpdated(9, "about:addons");
+
+    expect(fake._navigations[0]?.url).toContain(PANIC);
+    expect(fake._navigations[0]?.url).not.toContain(GATE);
+  });
+
+  it("redirects newly created gated tabs to the panic page too", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+    await activatePanicMode();
+
+    await fake._fireCreated({ id: 10, url: "about:addons" });
+
+    expect(fake._navigations[0]?.url).toContain(PANIC);
+  });
+
+  it("goes back to the password gate once panic has expired", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+    await activatePanicMode();
+    // Backdate the deadline directly — fake timers would deadlock the
+    // harness's setTimeout-based flush.
+    const { setState } = await import("../src/shared/storage");
+    await setState({ panicUntil: Date.now() - 1 });
+
+    await fake._fireUpdated(11, "about:addons");
+
+    expect(fake._navigations[0]?.url).toContain(GATE);
+    expect(fake._navigations[0]?.url).not.toContain(PANIC);
+  });
+
+  it("panic overrides a valid settings pass", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+    await grantSettingsPass("browsing-pw");
+    await activatePanicMode();
+
+    await fake._fireUpdated(12, "about:addons");
+
+    expect(fake._navigations[0]?.url).toContain(PANIC);
   });
 });
