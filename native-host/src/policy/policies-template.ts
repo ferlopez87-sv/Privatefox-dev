@@ -50,6 +50,13 @@ export function buildPolicies(
     updates_disabled: true,
   };
   // Grant private-window access when requested and not blocked entirely.
+  // VERIFIED against Firefox admin docs (Apr 2026): the key is
+  // `private_browsing`, a boolean, available Firefox 136+ / ESR 128.8+.
+  // Below those versions the key is ignored (access stays user-controlled
+  // in about:addons) — the stats dashboard's private-window coverage line
+  // already reflects that honestly. No manifest "incognito" field is
+  // needed: Firefox's default is "spanning" (events from private windows
+  // arrive once access is granted; "split" is unsupported).
   if (grantPrivateBrowsingAccess && !disablePrivateBrowsing) {
     extensionSettings["private_browsing"] = true;
   }

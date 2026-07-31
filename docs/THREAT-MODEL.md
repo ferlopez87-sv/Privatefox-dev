@@ -16,6 +16,24 @@ delete the app bundle, boot another browser).
 | Waiting out the lock | Lock re-asserts on startup and after idle timeout |
 | Guessing the password | PBKDF2 (210k iterations, SHA-256, per-hash salt); only hashes stored |
 | Reading credentials from the extension | SMTP/mail config lives only in the native host's 0600 file |
+| Reading the settings in Options while away | Settings password gate; the usage-stats dashboard (browsing-history-adjacent data) is gated identically, via the shared `SettingsGate` |
+| Opening a protected surface mid-panic | Panic mode: nav-guard redirects to `src/panic/` (no password field), and `grantSettingsPass` refuses even a correct password until `panicUntil` passes |
+
+## Panic mode caveats
+
+- **It is a time-box, not a hard wall.** Anything reachable without
+  `about:addons`/`about:preferences` (e.g. `about:config`, remote
+  debugging) is untouched, matching the accepted-bypasses posture below.
+- **Private-window closing is conditional.** `windows.onCreated` can only
+  see incognito windows once the extension has private-window access
+  (`private_browsing` policy key + restart). Before that, a private window
+  opened during panic is simply invisible to the extension — the UI states
+  this rather than claiming a hard block.
+- **The settings pass is revoked at activation** so a pass taken before
+  panicking doesn't survive the trigger.
+- **Locking does not end panic, and panic does not lock browsing** — they
+  are orthogonal; the panic window runs on its wall-clock deadline
+  regardless.
 
 ## Accepted bypasses (documented decisions, not oversights)
 

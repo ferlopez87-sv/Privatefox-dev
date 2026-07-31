@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Privatefox is a **macOS-only Firefox extension that locks the user out of their own browser behind a password** — a self-control/focus tool for a single person on their own machine (not parental control, not a multi-user/enterprise product). The distinguishing constraint: a WebExtension alone cannot block Private Browsing, cannot block `about:addons`, and cannot prevent its own removal. Firefox Enterprise Policies (`policies.json`) are therefore not an optional hardening layer here — they are the actual enforcement mechanism for those three requirements. The extension's own scripts only ever provide defense-in-depth on top of that.
 
-**Repository status: Phases 1–4 implemented** (core lock, options/idle/recovery, native host + policy installer, email recovery). Remaining: Phase 5 (Node SEA packaging, release polish) and real-Mac manual QA of the policy/native-host layer. Keep this file in sync as work lands.
+**Repository status: Phases 1–4 implemented** (core lock, options/idle/recovery, native host + policy installer, email recovery), **plus Phase 6 (local usage statistics dashboard, 1.6.0) and panic mode (1.7.0)**. Remaining: Phase 5 (Node SEA packaging, release polish) and real-Mac manual QA of the policy/native-host/private-window layer. Keep this file in sync as work lands.
 
 ## Read these two files before starting non-trivial work
 
@@ -64,16 +64,18 @@ Privatefox-dev/
 ├── extension/                   # the WebExtension (Vite + TypeScript)
 │   ├── src/
 │   │   ├── manifest.ts          # source-of-truth manifest object, consumed by the vite plugin
-│   │   ├── background/          # index.ts, lock-state.ts, surface-lock.ts, idle-monitor.ts, nav-guard.ts, native-bridge.ts, router.ts
+│   │   ├── background/          # index.ts, lock-state.ts, surface-lock.ts, idle-monitor.ts, nav-guard.ts, native-bridge.ts, router.ts, stats-tracker.ts
 │   │   ├── content/              # overlay.ts (content script entry), overlay-ui.ts (closed ShadowRoot UI)
 │   │   ├── newtab/               # chrome_url_overrides.newtab target — the lock/welcome screen
-│   │   ├── popup/                # action.default_popup — toolbar status card + Lock now / Preferences
+│   │   ├── popup/                # action.default_popup — toolbar status card + Lock now / Preferences / Usage stats / Panic mode
 │   │   ├── gate/                 # password gate nav-guard redirects to for about:addons
+│   │   ├── panic/                # no-password screen nav-guard redirects to while panic mode is active
+│   │   ├── dashboard/            # local usage statistics page (opens/unlocks/dwell time), gated like options
 │   │   ├── options/              # password-gated (settingsPassUntil); welcome message, password, idle timeout, recovery, protection toggles
 │   │   ├── setup/                 # first-run onboarding: force password creation + one-time recovery code display
-│   │   ├── shared/                # crypto.ts, storage.ts, recovery-code.ts, protocol.ts, constants.ts
-│   │   └── ui/                    # Preact components shared by lock/options/setup screens
-│   └── tests/                     # Vitest: crypto.ts, lock-state.ts, recovery-code.ts, storage.ts
+│   │   ├── shared/                # crypto.ts, storage.ts, recovery-code.ts, protocol.ts, constants.ts, domain.ts, stats-storage.ts
+│   │   └── ui/                    # state.ts (storage hook), settings-gate.tsx (SettingsGate + useNow), styles.css
+│   └── tests/                     # Vitest: crypto, lock-state, recovery-code, storage, nav-guard, surface-lock, panic, setup.ts fake browser
 │
 └── native-host/                  # companion native-messaging app (Node/TypeScript)
     ├── src/
@@ -105,7 +107,11 @@ Both conditional policies ride along on the `install-policy` native command; `bu
 
 **Two passwords, deliberately.** `passwordHash` unlocks browsing; `settingsPasswordHash` guards the protected surfaces (Firefox preferences, `about:addons`, this extension's options). They are separate because the browsing password is typed all day and stops being a real decision, while those surfaces are where the protections get turned off — a *commitment device*, not extra cryptographic strength. Rules: while `settingsPasswordHash` is null the browsing password is accepted as a fallback (otherwise the options page needed to set it would be unreachable); once set, the browsing password is rejected there. Claiming it the first time takes the browsing password, changing it takes the current settings password. **Both recovery paths clear both hashes** — that is the only way back if the settings password is the one forgotten.
 
-**Preferences password gate.** `src/options/` renders a password prompt unless `settingsPassUntil` is in the future (5 min, revoked on `lock()`). One pass covers every protected surface. Gating happens inside the page (it is extension-owned), not via `nav-guard`.
+**Preferences password gate.** `src/options/` renders a password prompt unless `settingsPassUntil` is in the future (5 min, revoked on `lock()`). One pass covers every protected surface. Gating happens inside the page (it is extension-owned), not via `nav-guard`. The dashboard (`src/dashboard/`) uses the same extracted `SettingsGate` — it is browsing-history-adjacent data, so it deserves the same friction as the settings themselves.
+
+**Usage statistics (Phase 6, v1.6.0).** Local-only: browser opens, unlocks, and dwell time per domain, never a URL — `domain.ts` extracts host-only labels (null for about:/extension/file: schemes), `stats-storage.ts` keeps per-day buckets (~31 keys, 30-day auto-prune, lifetime counters never pruned). `stats-tracker.ts` tracks the active tab with a durable session (`privatefoxActiveDwell` in its own storage key — deliberately not inside `privatefoxStats`, so tab switches don't churn the blob), elapsed time computed only at session close so a background-page suspend loses nothing. Opens/unlocks are counted at the existing `runtime.onStartup` and the three unlock success paths in `lock-state.ts`. Private-window dwell requires the extension to actually have private-window access — the `ExtensionSettings.<id>.private_browsing` policy key (verified, Firefox 136+ / ESR 128.8+) written by the native host via `grantPrivateBrowsingAccess`, plus a restart; the dashboard says so honestly instead of overstating coverage. No manifest `"incognito"` field is needed (Firefox default is "spanning").
+
+**Panic mode (v1.7.0).** Emergency override: for a hardcoded 10 minutes (`PANIC_MODE_MINUTES`) no password — not even the correct settings password — opens any protected surface. `panicUntil` is a wall-clock deadline like `settingsPassUntil` (no timer; the UI re-renders when it passes via the shared `useNow`). Enforcement: `nav-guard` redirects to `src/panic/` (a page with no password field) instead of `src/gate/`; `grantSettingsPass` refuses outright even when the password is correct (defense-in-depth against direct runtime-message calls); options renders the panic screen instead of the gate; `windows.onCreated` closes incognito windows while active, and activation sweeps private windows already open. Honest caveat, surfaced in the UI: the private-window piece only works with private-window access granted (native host + restart) — without it a WebExtension never sees incognito windows at all.
 
 **`about:addons` password gate.** `nav-guard.ts` watches `tabs.onUpdated` for the pages in `GATED_PAGES` and redirects to `src/gate/` — a password prompt that, on success, stores a short-lived `addonsPassUntil` (5 min) and forwards the tab to the requested page. This is what protects `about:addons` when `blockAboutAddons` is off, and it is the only protection before Phase 3 is installed; with the policy on, the page is unreachable and the gate never runs. The pass is revoked on every `lock()`, and the gate's `target` query param is validated against `GATED_PAGES` (untrusted input — never forward to an arbitrary URL). Still defense-in-depth: `about:config` and the remote debugging protocol can bypass it.
 

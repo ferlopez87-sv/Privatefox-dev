@@ -106,7 +106,15 @@ written to `Firefox.app/Contents/Resources/distribution/policies.json`.
 extension's `blockPrivateBrowsing` / `blockAboutAddons` preferences (Options →
 Protection) ride along on the `install-policy` native command, and
 `buildPolicies` omits each key when it is off. The force-install is always
-present. Turning `blockAboutAddons` off trades the hard block for the
+present. A third conditional key, `ExtensionSettings.<id>.private_browsing`
+(verified against Mozilla admin docs; Firefox 136+ / ESR 128.8+), is emitted
+when `grantPrivateBrowsingAccess` is on and private browsing is not blocked —
+it grants the extension access to private windows so the stats dashboard can
+also cover them, without the user manually toggling "Run in Private Windows"
+in about:addons. No manifest `"incognito"` field is required: Firefox's
+default is `"spanning"`, and events from private windows arrive once access
+is granted ("split" is unsupported; "not_allowed" would hide them entirely).
+Turning `blockAboutAddons` off trades the hard block for the
 extension's password gate (below). Effective only after full restart;
 wiped by every Firefox update (the `com.privatefox.policyguard` LaunchAgent
 re-installs it, with a grace delay so Gatekeeper's post-update validation
@@ -114,6 +122,66 @@ isn't disturbed).
 
 The `.xpi` must be AMO-signed (unlisted channel) — Release Firefox
 enforces signatures even for force-installed extensions.
+
+## Usage statistics subsystem (Phase 6, v1.6.0)
+
+The dashboard (`src/dashboard/`) is a standalone extension page reached from
+the popup and Options, gated by the same `SettingsGate` as options
+(browsing-history-adjacent data gets the same friction as settings).
+
+**Storage** (`shared/stats-storage.ts`) is a SEPARATE storage key from
+`privatefoxState` on purpose: that blob is config, read/written on every
+settings change, while stats are written on nearly every tab switch.
+Per-day buckets (`days: Record<"YYYY-MM-DD", DailyBucket>`) keep the shape
+bounded and make 30-day pruning O(days); lifetime open/unlock counters are
+never pruned; per-domain totals are derived via `aggregateDomainTotals`,
+not stored redundantly. Domain extraction (`shared/domain.ts`) returns only
+a hostname (leading `www.` stripped), null for about:/extension/file:/data:/
+javascript: and non-http(s) — never a path, query, or full URL.
+
+**Dwell-time tracking** (`background/stats-tracker.ts`) is the hard part
+because the background page is non-persistent. A durable session record
+(`privatefoxActiveDwell`: domain, startedAt, tabId) lives in its own storage
+key; listeners on `tabs.onActivated` / `onUpdated` (same-tab navigation) /
+`onRemoved` / `windows.onFocusChanged` (WINDOW_ID_NONE) / `storage.onChanged`
+(lock transitions) all funnel through one idempotent
+`closeCurrentSession()` that flushes `now - startedAt` exactly once, so
+near-simultaneous events can't double-count. Elapsed time is computed only
+at close, so a suspend/resume mid-session loses nothing; a leftover session
+at `onStartup` is discarded (attributing a stale span would be a guess).
+Dwell accrues only while unlocked: `locked: true` closes and blocks
+sessions, `locked: false` opens one for the active tab.
+
+**Counters** are plain call sites, matching the repo's small-explicit-
+functions style: `recordOpen()` on `runtime.onStartup` next to `lock()`;
+`recordUnlockStat()` on the success branch of each of the three unlock
+paths in `lock-state.ts` — deliberately not a shared hook wrapping
+`setState({locked:false})`.
+
+## Panic mode (v1.7.0)
+
+An emergency override, not a lock: ordinary browsing is untouched, but for
+`PANIC_MODE_MINUTES` (10) no password opens any protected surface.
+
+- **State**: `panicUntil` (ms epoch, null = inactive) in `privatefoxState`,
+  a wall-clock deadline like `settingsPassUntil` — no timer, `useNow`
+  re-renders the UI when it passes.
+- **Trigger**: `activate-panic-mode` runtime message (popup button, Options
+  button) → `activatePanicMode()` sets the deadline, revokes any
+  `settingsPassUntil` mid-session, and sweeps private windows already open.
+- **Enforcement**: `nav-guard` checks panic before the settings pass
+  (locked is still checked first — a locked browser shows the lock screen,
+  never the panic page, which would be a lock bypass) and redirects to
+  `src/panic/`, a page with no password field. `grantSettingsPass` refuses
+  outright while active even with a correct password, so a direct runtime-
+  message call can't bypass the UI redirect. Options renders the panic
+  screen instead of the gate.
+- **Private windows**: `windows.onCreated` → `maybeCloseIncognitoWindow()`
+  closes incognito windows while active. Honest limitation, stated in the
+  UI: this only works once the extension has private-window access
+  (`private_browsing` policy key + restart). Without access, a
+  WebExtension never sees incognito windows, so the panic UI says coverage
+  depends on that rather than claiming a hard block.
 
 ## Native messaging protocol
 

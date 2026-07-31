@@ -74,6 +74,24 @@ because the user pasted their local `npm install` output.
 **Lesson**: `npm audit` (or equivalent) belongs in the standard verification
 gate alongside tests/typecheck/build/lint, not as a reactive fire drill.
 
+## `npm audit` still reports 10 highs in web-ext's toolchain (accepted, no clean fix)
+
+Post-1.7.0 audit: 10 high-severity advisories, ALL inside `web-ext`'s
+dev-only transitive chain (`addons-linter` → `eslint` → `minimatch` →
+`brace-expansion`; `fx-runner` → `shell-quote`). `web-ext@10.5.0` is already
+latest; the only "fix" is `npm audit fix --force`, which downgrades to
+`web-ext@1.3.0` (9 major versions — breaks the build). `npm audit
+--omit=dev` reports **0 vulnerabilities** in the shipped runtime (preact,
+nodemailer). The dev toolchain is never installed, bundled, or executed by
+users.
+
+**Lesson**: distinguish shipped-dependency vulnerabilities from build-
+toolchain ones when reporting audit results — the runtime is clean, and
+forcing a 9-major downgrade to silence the report would be worse than the
+advisories (which are DoS-in-toolchain class, not exploitable in the
+product). Re-check `npm view web-ext version` each session; if Mozilla
+bumps the transitive deps, the report should clean up on its own.
+
 ## Local environment drift causes false alarms that look like code bugs
 
 Several rounds of user-reported "errors" were not bugs in this repo at all:
@@ -99,9 +117,22 @@ reflects the latest shipped work. (Confirmed explicitly authorized once by
 the user, then continued as established practice — still worth a quick
 mention rather than assuming forever.)
 
-## Practices that worked well — keep doing these
+## vi.useFakeTimers() deadlocks the fake-browser harness
 
-- **Every shipped change bumps `extension/package.json`'s version and adds
+Testing a wall-clock deadline (panic mode, `settingsPassUntil`) with
+`vi.useFakeTimers()` timed out the nav-guard tests: the harness's internal
+`flush()` awaits a real `setTimeout(resolve, 0)`, which fake timers never
+fire. Worse, a timed-out test leaks the fake timers into the next test,
+which then times out too — two unrelated-looking failures from one root
+cause.
+
+**Lesson**: for deadline logic in tests, backdate/forward the stored value
+directly (`await setState({ panicUntil: Date.now() - 1 })`) instead of
+faking the clock. Fake timers are fine for pure synchronous asserts
+(lock-state's TTL tests) but never around `_fireUpdated`/`_fireCreated` —
+those await the real-timer flush.
+
+## Practices that worked well — keep doing these- **Every shipped change bumps `extension/package.json`'s version and adds
   a `CHANGELOG.md` entry, in the same commit.** Added mid-project at the
   user's request; never skip it — the user installs `.xpi`/`.zip` files by
   hand and has no other way to tell builds apart.

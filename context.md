@@ -6,7 +6,7 @@ this file whenever a work session ends with something unfinished, or when a
 fact here goes stale. This is state, not process — see `feedback.md` for
 lessons learned.
 
-## Start here — resuming toward v1.6 (Phase 6: stats, dashboard, panic mode)
+## Start here — current state
 
 If you are a fresh agent picking this up cold, do these in order before
 writing any code:
@@ -14,10 +14,8 @@ writing any code:
 1. **Read `CLAUDE.md` fully first**, then `feedback.md`, then this whole
    file — in that order. `CLAUDE.md` has the architecture and the mandatory
    5-gate workflow (Plan → Execute → Version → Test → Confirm); `feedback.md`
-   has the mistakes already made in this exact feature area (the
-   `about:addons` gate shipped broken twice, a preference that was never
-   wired to anything) so you don't repeat them.
-2. **Check out the feature branch and confirm where it actually is**:
+   has the mistakes already made so you don't repeat them.
+2. **Confirm where the repo actually is**:
    ```sh
    git checkout claude/claude-md-documentation-y27vhu
    git log --oneline -5
@@ -26,48 +24,35 @@ writing any code:
    The version number and latest commits may have moved since this file was
    last edited — trust the repo over this document if they disagree, and
    update this file to match once you notice drift.
-3. **Verify the two unresolved external facts before building on top of
-   them** — both are called out inline below with a ⚠, but doing them first
-   avoids designing further pieces around a guess:
-   - The exact Mozilla `ExtensionSettings.<id>.private_browsing` policy key
-     name (see "Native host plumbing" below).
-   - Whether Firefox's manifest needs an `"incognito"` field at all (Chrome's
-     model doesn't map directly).
-4. **Build in this order** — later pieces depend on earlier ones:
-   1. Re-add the `apply-policy` `RuntimeRequest`/`NativeCommand` plumbing
-      (extension protocol, native-host protocol mirror, `router.ts` case,
-      native-host `policies-template.ts`/`install-policy.ts`/`commands/index.ts`,
-      `native-host/tests/policy.test.ts`) — see "Progress so far" and
-      "Native host plumbing" below for the exact shape. This closes the
-      loop the stats/panic private-browsing coverage both depend on.
-   2. `extension/src/background/stats-tracker.ts` + the two counter call
-      sites — see "Tab/window tracking" and "Counter call sites" below.
-   3. Extract `SettingsGate` out of `extension/src/options/main.tsx` into
-      `extension/src/ui/settings-gate.tsx` (grab the *current* version — it
-      grew a "Forgot settings password?" sub-flow in 1.5.0, don't extract an
-      older copy from memory). Both the dashboard and the panic screen need it.
-   4. The dashboard (`extension/src/dashboard/`) — see "Dashboard" below.
-   5. Panic mode — see the "Also planned: panic mode" section below in full;
-      it reuses the extracted `SettingsGate` and the `useNow(deadline)` hook
-      already in `options/main.tsx`.
-5. **Before calling it done**: bump `extension/package.json` to `1.6.0`
-   (this is new user-visible capability, not a patch), add the
-   `CHANGELOG.md` entry, update `CLAUDE.md`/`docs/ARCHITECTURE.md`/
-   `docs/THREAT-MODEL.md` per the notes in "Progress so far" below, then run
-   the full verification gate: `npm test` and `npm run typecheck` in both
-   `extension/` and `native-host/`, `npm run build`, `npm run lint`. Do not
-   skip `npm audit` (see `feedback.md` — it was skipped once, silently
-   accumulating 18 vulnerabilities before being caught).
-6. **Commit on the feature branch, push, then fast-forward `main` to match**
-   (established pattern — the user views the repo on GitHub's default
-   branch). Then `cd extension && npm run package` and hand the built
-   `.zip` to the user directly (`SendUserFile`) rather than asking them to
-   build it locally — see "Working style established with this user" below.
-7. **State plainly what you verified and what still needs a real Mac** —
-   several items in "Verification still needed" and the panic-mode section
-   cannot be exercised in a sandbox (private-window behavior, a background-
-   page suspend, a full Firefox restart after a policy change). Say so
-   explicitly rather than implying full coverage.
+3. **What has shipped:** Phase 6 (local usage statistics dashboard) shipped
+   as **1.6.0**; panic mode shipped as **1.7.0**. Both are on `main` and the
+   feature branch. The two previously-unverified external facts are now
+   VERIFIED (below) and baked into the code comments and docs.
+4. **What is NOT done (real-Mac manual QA only)** — cannot be exercised in a
+   sandbox, so never claim it is covered:
+   - Private-window tracking actually covering private windows after the
+     native host writes the `private_browsing` policy key + restart.
+   - Panic mode closing a real incognito window (same prerequisite).
+   - Dwell time surviving a background-page suspend.
+   - 30-day pruning in a real profile; dashboard settings-gate behavior.
+   - Phase 5 (Node SEA packaging, release polish) — never started.
+
+## Verified external facts (were ⚠, now resolved)
+
+- **`ExtensionSettings.<id>.private_browsing` policy key name: VERIFIED.**
+  Confirmed against the official Firefox admin reference (Apr 2026): it is
+  `private_browsing`, a boolean, available **Firefox 136+ / ESR 128.8+**.
+  Below those versions the key is silently ignored, so private-window stats
+  coverage degrades to user-controlled (about:addons toggle) — the dashboard
+  copy already reflects this honestly.
+- **`incognito` manifest field: NOT NEEDED for Firefox.** MDN + Firefox
+  source docs: the default is `"spanning"` (extension sees events from
+  private and non-private windows once access is granted); `"split"` is
+  unsupported in Firefox; `"not_allowed"` would hide private windows
+  entirely. Access is controlled by the hidden permission
+  `internal:privateBrowsingAllowed`, granted per-extension in about:addons or
+  via the `private_browsing` policy key. `manifest.ts` correctly omits the
+  field.
 
 ## Repository
 
@@ -77,21 +62,24 @@ writing any code:
   fast-forwarded to match after each push, because the user views the repo
   on GitHub's default (`main`) view. Keep doing this after every push unless
   told otherwise.
-- Shipped extension version (both branches, as of the last commit): see
-  `extension/package.json` — was **1.5.0** as of this writing (fixed no way
-  to reset a forgotten settings password; added a configurable post-gate
-  redirect). Bump-per-change discipline is mandatory (see CLAUDE.md's
-  Versioning section) — check `CHANGELOG.md` for the true latest before
-  assuming this number is current.
+- Shipped extension version (both branches, as of the last commit): check
+  `extension/package.json` / `CHANGELOG.md` — was **1.7.0** (panic mode) as
+  of this writing. Bump-per-change discipline is mandatory (see CLAUDE.md's
+  Versioning section).
 - Native host versions independently (`native-host/package.json`), only
-  when the host itself changes.
+  when the host itself changes — last bumped to 1.1.0 with the
+  `grantPrivateBrowsingAccess` policy option.
 
 ## Build/test status as of last full verification
 
-Phases 1–4 code-complete with unit tests (see CLAUDE.md "Phased build
-order"). Phase 5 (Node SEA packaging, release polish) not started.
-Real-Mac manual QA of the policy/native-host layer (Phase 3/4 behavior)
-still outstanding — this sandbox cannot exercise it.
+- Phase 6 + panic mode code-complete with unit tests: **63 tests** in
+  `extension/` (7 files), 12 in `native-host/`, all passing. Typecheck,
+  build, web-ext lint clean in both packages (2 pre-existing lint warnings:
+  `MISSING_DATA_COLLECTION_PERMISSIONS` manifest key and an
+  `UNSAFE_VAR_ASSIGNMENT` innerHTML — neither introduced by Phase 6/7).
+- Real-Mac manual QA of the policy/native-host/private-window layer
+  (Phases 3/4 + Phase 6 private coverage + panic) still outstanding — this
+  sandbox cannot exercise it.
 
 ## Working style established with this user
 
@@ -108,316 +96,31 @@ still outstanding — this sandbox cannot exercise it.
   clarifying-question round before implementing (matches CLAUDE.md's Plan
   gate) — this has gone well every time it's been done.
 
-## In-flight, UNCOMMITTED work: Phase 6 — local usage statistics
+## What a fresh session should know about the Phase 6 + panic code
 
-Requested by the user: track how many times Firefox opens, how many times
-the browser is unlocked, which domains are visited while unlocked
-(including private/incognito windows), and time spent per domain — entirely
-local, never phoned home.
+- **Stats:** `shared/domain.ts` + `shared/stats-storage.ts` (per-day
+  buckets, 30-day prune, derived domain totals) were committed before
+  1.6.0; `background/stats-tracker.ts` is the dwell tracker (durable
+  session key `privatefoxActiveDwell`, idempotent close, elapsed computed at
+  close). Counters: `recordOpen()` on `runtime.onStartup` next to `lock()`;
+  `recordUnlockStat()` on the three unlock success paths. Dashboard at
+  `src/dashboard/`, gated by the shared `SettingsGate`.
+- **Panic:** `panicUntil` wall-clock deadline; `activatePanicMode()` +
+  `maybeCloseIncognitoWindow()` in `lock-state.ts`; nav-guard redirects to
+  `src/panic/` (no password field) while active; `grantSettingsPass`
+  refuses a correct password during panic; Options shows a panic screen.
+  Popup "Panic mode" button; Options "Activate panic mode now".
+- **Shared UI:** `src/ui/settings-gate.tsx` exports `SettingsGate` and
+  `useNow` — used by options, dashboard, and panic pages. Extract any
+  further shared pieces there, not into options/main.tsx.
+- **Policy plumbing:** `apply-policy` RuntimeRequest (router.ts) → native
+  host `install-policy` with `disablePrivateBrowsing` /
+  `blockAboutAddons` / `grantPrivateBrowsingAccess`. The native host emits
+  `ExtensionSettings.<id>.private_browsing` only when
+  `grantPrivateBrowsingAccess && !disablePrivateBrowsing`.
 
-**User's decisions (final, already made, do not re-ask)**:
-- Granularity: **domain only**, never full URL/path/query.
-- Retention: **30 days**, auto-pruned.
-- Private browsing: **force-granted via Firefox Enterprise Policy** (native
-  host), not a manual `about:addons` toggle.
-- Display: **a new dedicated dashboard page**, not squeezed into Options.
+## Still planned (nothing in flight)
 
-A full implementation plan was written to
-`/root/.claude/plans/stateless-spinning-galaxy.md` during planning — **that
-path is outside this git repo and specific to the sandbox container it was
-written in; it will not exist in a fresh session/container.** The design is
-therefore reproduced in full below so nothing is lost.
-
-### Progress so far
-
-Committed to `claude/claude-md-documentation-y27vhu` as an explicit WIP
-commit — **deliberately NOT fast-forwarded into `main`**, unlike every other
-completed change in this repo's history, since `main` only ever receives
-fully-tested/typechecked work. If you're picking this back up: `git log` on
-the feature branch to find that commit, keep building on top of it, and
-only fast-forward `main` once the whole Phase 6 feature is complete and
-verified per usual.
-
-**Update**: the `{kind:"apply-policy"}` `RuntimeRequest` variant and the
-`grantPrivateBrowsingAccess` field on the `install-policy` `NativeCommand`
-(both listed as "done" in the original WIP commit) were **reverted** in the
-1.5.0 session, in both `extension/src/shared/protocol.ts` and
-`native-host/src/protocol.ts` — they were unused (nothing called
-`apply-policy`, no native-host command consumed the extra field) and were
-making `npm run typecheck` fail on an unrelated bug-fix release. Re-add them
-when Phase 6 actually resumes; the design for them is unchanged, just
-reproduced below and not currently in the code.
-
-Done and still in the tree:
-- `extension/src/shared/domain.ts` — `extractTrackableDomain(url)`, complete.
-- `extension/src/shared/stats-storage.ts` — full `privatefoxStats` module
-  (`getStats`/`setStats`/`recordOpen`/`recordUnlockStat`/`recordDwellTime`/
-  `pruneStats`/`aggregateDomainTotals`), complete.
-- `extension/src/shared/constants.ts` — has
-  `DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS`.
-- `extension/src/shared/storage.ts` — has `grantPrivateBrowsingAccess`
-  field + default (present in `PrivatefoxState`, unused by any UI yet).
-
-**Not started yet** (see full plan below for exact shape):
-- `extension/src/shared/protocol.ts` / `native-host/src/protocol.ts` — need
-  the `apply-policy` `RuntimeRequest` and `NativeCommand` field re-added
-  (see "Update" above — they existed once and were reverted).
-- `native-host/src/policy/policies-template.ts` — `PolicyOptions` needs
-  `grantPrivateBrowsingAccess?: boolean`, `buildPolicies` needs to emit
-  `ExtensionSettings[EXTENSION_ID].private_browsing: true`.
-  **⚠ The exact Mozilla policy key name (`private_browsing`) was NOT
-  verified against current docs before this session paused** — a WebFetch
-  attempt against `firefox-admin-docs.mozilla.org` 403'd and a GitHub docs
-  page had moved the content elsewhere. Verify before shipping; getting the
-  key wrong silently no-ops the whole feature.
-- Also unverified: whether `extension/src/manifest.ts` needs an
-  `"incognito"` field at all for Firefox (Chrome's `"spanning"`/`"split"`
-  modes don't map directly to Firefox's model) — confirm against current
-  Firefox WebExtension docs.
-- `native-host/src/commands/install-policy.ts`, `commands/index.ts` — wire
-  the new field through, mirroring how `disablePrivateBrowsing`/
-  `blockAboutAddons` already flow.
-- `native-host/tests/policy.test.ts` — add include/omit cases for
-  `private_browsing`, mirroring the existing two.
-- `extension/src/background/stats-tracker.ts` — not created. Tab/window
-  dwell-time tracker; see "Tab/window tracking" below for the full design.
-- `extension/src/background/index.ts` — needs `registerStatsTracker()`
-  added to the synchronous top-level register calls, and `void recordOpen();`
-  added to the existing `runtime.onStartup` listener.
-- `extension/src/background/lock-state.ts` — needs a `recordUnlock()`
-  helper called on the success path of `unlockWithPassword`,
-  `unlockWithRecoveryCode`, and `unlockWithEmailCode`.
-- `extension/src/background/router.ts` — needs an `"apply-policy"` case
-  that reads current state and calls `callNativeHost({command:
-  "install-policy", disablePrivateBrowsing: state.blockPrivateBrowsing,
-  blockAboutAddons: state.blockAboutAddons, grantPrivateBrowsingAccess:
-  state.grantPrivateBrowsingAccess})` — this closes the pre-existing gap
-  documented in feedback.md (nothing currently calls install-policy from a
-  running browser at all).
-- `extension/src/ui/settings-gate.tsx` — extract the `SettingsGate`
-  component (still private to `extension/src/options/main.tsx` as of 1.5.0
-  — it grew a "Forgot settings password?" sub-flow in that release, so
-  extract the updated version, not the original) so the new dashboard can
-  reuse it.
-- `extension/src/options/main.tsx` — new checkbox for
-  `grantPrivateBrowsingAccess` in `ProtectionSettings` (with copy noting it
-  only matters if `blockPrivateBrowsing` is off; note `ProtectionSettings`
-  also gained a `postGateRedirectUrl` field in 1.5.0, so place the new
-  checkbox alongside it, not instead of it), an "Apply policy now" button
-  that sends `{kind: "apply-policy"}`, a link to the new dashboard, and
-  switch to the extracted `SettingsGate`.
-- `extension/src/dashboard/{index.html,main.tsx,use-stats.ts}` — not
-  created. New standalone page, gated by the same settings-password
-  mechanism as Options.
-- `extension/vite.config.ts` — append `"src/dashboard/index.html"` to
-  `additionalInputs.html`.
-- `extension/src/popup/main.tsx` — new "Usage stats" button next to
-  "Preferences".
-- `extension/src/ui/styles.css` — new `main.dashboard { max-width: 40rem; }`
-  container and `.bar` styles for the domain-time list.
-- Version bump (this is a new user-visible capability → minor) and
-  `CHANGELOG.md` entry.
-- Docs: `CLAUDE.md` (add `src/dashboard/` to the layout list + a short
-  Usage Statistics note), `docs/ARCHITECTURE.md` (stats subsystem
-  subsection), `docs/THREAT-MODEL.md` (note the dashboard is browsing-
-  history-adjacent and gated like Options).
-
-### Full design (reproduced from the plan, so it survives container loss)
-
-**Storage shape** (`extension/src/shared/stats-storage.ts`, already
-implemented — reproduced here for reference):
-```ts
-export interface DomainStat { domain: string; totalMs: number; lastVisitedAt: number; }
-export interface DailyBucket { date: string; opens: number; unlocks: number; domains: Record<string, number>; }
-export interface PrivatefoxStats { schemaVersion: number; totalOpens: number; totalUnlocks: number; days: Record<string, DailyBucket>; }
-```
-Per-day buckets (not a flat event log) keep the shape bounded (~31 keys) and
-make 30-day pruning O(days). Lifetime open/unlock counters are never pruned;
-only per-domain time is windowed. Per-domain totals are *derived* via
-`aggregateDomainTotals`, not stored redundantly.
-
-**Domain extraction** (`extension/src/shared/domain.ts`, already
-implemented): `null` for `about:`/`moz-extension:`/`file:`/`chrome:`/`data:`/
-`javascript:` and anything not `http(s):`; strips only a leading `www.`
-(no eTLD+1 collapsing, no public-suffix-list dependency); IPs/localhost
-keep their port.
-
-**Tab/window tracking** (`extension/src/background/stats-tracker.ts`, not
-yet written) — the hard part, given the background page is non-persistent:
-
-- Durable session state in its own storage key (not inside
-  `privatefoxStats`, so tab-switching doesn't churn the stats blob):
-  ```ts
-  interface ActiveDwellSession { domain: string; startedAt: number; tabId: number; }
-  const SESSION_KEY = "privatefoxActiveDwell";
-  ```
-- `registerStatsTracker()`, called synchronously from `background/index.ts`
-  alongside the existing `registerRouter(); registerIdleListener();
-  registerNavGuard();`, registers:
-  - `tabs.onActivated` — close current session, open one for the newly
-    active tab if trackable and unlocked.
-  - `tabs.onUpdated` (same-tab navigation) — close old, open new.
-  - `tabs.onRemoved` — close out if the removed tab held the session.
-  - `windows.onFocusChanged` (`WINDOW_ID_NONE`) — close on losing OS focus
-    entirely; reopen on regaining it for the now-active tab.
-  - `storage.onChanged` on the lock state (same pattern as the existing
-    idle-timeout listener) — `locked: false→true` closes and blocks new
-    sessions; `true→false` opens one for the active tab. This is what makes
-    dwell time accrue **only while unlocked**.
-- Elapsed time is always computed as `closeTimestamp - session.startedAt`
-  at the moment a session closes — never accumulated incrementally in
-  memory, so a background-page suspend/resume mid-session loses nothing.
-  The one real loss case: quitting Firefox entirely with a session open —
-  `registerStatsTracker()` **discards** (does not flush) any leftover
-  `SESSION_KEY` found at `onStartup`, since attributing that stale span
-  would be a guess.
-- Every close path funnels through one idempotent `closeCurrentSession()`
-  helper (read `SESSION_KEY`, flush if present, clear it) so near-
-  simultaneous events (e.g. `onRemoved` then `onActivated`) can't double-count.
-- Private windows: once access is granted via the policy, these same
-  `tabs.*`/`windows.*` events should fire for them automatically — **needs
-  manual verification on a real Mac**, this sandbox cannot exercise private
-  windows at all.
-
-**Counter call sites**:
-- Firefox opens: `background/index.ts`'s existing `runtime.onStartup`
-  listener, alongside `void lock();` → add `void recordOpen();`.
-- Unlocks: three explicit call sites in `background/lock-state.ts` (on the
-  success branch of `unlockWithPassword`, `unlockWithRecoveryCode`,
-  `unlockWithEmailCode`) — deliberately not a shared hook wrapping
-  `setState({locked:false})` generically, matching this repo's style of
-  small explicit functions over cross-cutting hooks.
-
-**Native host plumbing** mirrors `disablePrivateBrowsing`/`blockAboutAddons`
-exactly (see "Not started yet" above for the precise files) — new
-`PolicyOptions.grantPrivateBrowsingAccess`, new `ExtensionSettings[id].private_browsing`
-key (name pending verification).
-
-**Dashboard**: `src/dashboard/{index.html,main.tsx,use-stats.ts}`,
-registered via `vite.config.ts`'s `additionalInputs`, reached from a new
-popup button and an Options link, gated by the extracted `SettingsGate`.
-Layout: header + "never leaves your device" note, summary facts (opens/
-unlocks/domains-tracked, reusing the existing `.facts` CSS pattern), a
-hand-rolled horizontal bar list per domain (no new chart dependency — matches
-this repo's minimal-dependency stance), and a private-browsing coverage line
-that reflects the stored preferences plus a static restart reminder (a
-WebExtension has no API to introspect whether `policies.json` is actually
-active — don't overstate this as a live check).
-
-### Current typecheck state
-
-Clean as of 1.5.0 — the `apply-policy`-related revert above means there's no
-known-broken state to work around anymore. When `apply-policy` is re-added
-to `shared/protocol.ts`, remember to add its `router.ts` case in the same
-change (last time, adding the protocol variant without the router case is
-exactly what broke `npm run typecheck` for a while).
-
-### Verification still needed once complete
-
-- `extension/`: `npm test` (new suites: `stats-storage`, `domain`,
-  `stats-tracker`, using the existing fake-browser harness pattern from
-  `nav-guard.test.ts`/`surface-lock.test.ts`), `npm run typecheck`,
-  `npm run build`, `npm run lint`.
-- `native-host/`: `npm test` (extended `policy.test.ts`), `npm run typecheck`,
-  `npm run build`.
-- Manual, real-Mac only: verify the exact `private_browsing` policy key and
-  whether `manifest.ts` needs an `incognito` field; confirm private-window
-  tracking actually works after native host install + restart; confirm
-  dwell time survives a background-page suspend; confirm 30-day pruning;
-  confirm the dashboard's settings gate behaves like Options.
-
-## Also planned: panic mode (requested, not started, exact version TBD)
-
-Requested alongside Phase 6: a "panic button" that, for **10 minutes**,
-blocks `about:addons` (and the sibling gated pages) and private browsing
-**with no password able to bypass it at all** — not even a correct settings
-password. Distinct from `lock()`: it does not lock ordinary browsing, only
-these two specific surfaces.
-
-**Known constraint, flagged to the user already**: a WebExtension cannot
-block private browsing outright — that's only possible via the
-`DisablePrivateBrowsing` enterprise policy, which needs `policies.json`
-rewritten **and a full Firefox restart** to take effect. That rules out a
-real instant/timed block. The honest, implementable substitute: **auto-close
-any private window opened during the panic window**, via
-`browser.windows.onCreated` checking `window.incognito` and calling
-`browser.windows.remove(window.id)` immediately. This only works if the
-extension already has private-window access granted (same
-`grantPrivateBrowsingAccess`/native-host prerequisite as the stats feature)
-— without that, panic mode's private-browsing enforcement is a no-op, and
-the UI must say so honestly rather than claim it's blocked. **Verify
-whether closing/inspecting windows needs anything beyond the `tabs`
-permission already granted** — flag for confirmation before shipping, same
-discipline as the `private_browsing` policy key above.
-
-### Design sketch
-
-**New state field**, `extension/src/shared/storage.ts`:
-```ts
-/** ms epoch; null = not in panic mode. Overrides settingsPassUntil while active. */
-panicUntil: number | null;
-```
-Default `null`. New constant `PANIC_MODE_MINUTES = 10` in `shared/constants.ts`
-(hardcoded per the user's spec — no UI to configure the duration, at least
-not initially).
-
-**Trigger**: a "Panic" button in the popup (`src/popup/main.tsx`, one click,
-no navigation needed — matches the "emergency" framing) and a status/
-re-trigger affordance in Options. Sends `{kind: "activate-panic-mode"}`.
-`lock-state.ts` gets:
-```ts
-export async function activatePanicMode(): Promise<void> {
-  await setState({
-    panicUntil: Date.now() + PANIC_MODE_MINUTES * 60_000,
-    settingsPassUntil: null, // revoke any pass already granted, mid-session
-  });
-  // sweep: close any private window already open at activation time
-  // (browser.windows.getAll({windowTypes:["normal"]}) filtered on .incognito)
-}
-export function hasActivePanic(state): boolean {
-  return state.panicUntil !== null && Date.now() < state.panicUntil;
-}
-```
-No timer needed to "end" it — same wall-clock-deadline convention already
-used for `settingsPassUntil`/`addonsPassUntil` (`Date.now() < storedUntil`,
-checked lazily wherever it matters, not an active countdown).
-
-**Enforcement points, all overriding the normal settings-password flow**:
-1. `background/nav-guard.ts`'s `guardTab()` — check `hasActivePanic()`
-   *first*, before the existing `locked` check and before
-   `hasValidSettingsPass()`. If active, redirect to a new
-   `src/panic/index.html` page (no password field at all — just "Panic mode
-   active until HH:MM:SS, no password will work" and a link back to
-   `about:newtab`) instead of `src/gate/`.
-2. `background/lock-state.ts`'s `grantSettingsPass()` — reject outright
-   (return `false`) whenever `hasActivePanic()` is true, regardless of
-   whether the password is correct. This is defense-in-depth against
-   someone bypassing the UI redirect by sending the `settings-access-attempt`
-   runtime message directly (e.g. from the background console) — matches
-   this repo's existing "not a hard boundary, but don't make it trivial"
-   posture (see `docs/THREAT-MODEL.md`).
-3. `extension/src/options/main.tsx`'s `App()` — check `state.panicUntil`
-   before rendering `SettingsGate`; if active, render the same panic screen
-   instead (Options is one of the protected surfaces already, so it gets
-   the same treatment as `about:addons`/`about:preferences` for consistency
-   — "no password works on any protected surface during panic," not just
-   the one the user happened to name).
-4. `background/index.ts` (new listener) — `browser.windows.onCreated`,
-   checking `hasActivePanic()` and `window.incognito`, closing the window
-   immediately if both are true. Register alongside the other synchronous
-   `register*()` calls.
-
-**New file**: `extension/src/panic/{index.html,main.tsx}` — same shape as
-`src/gate/`, but no form, just a countdown-ish status message and a link
-back to `about:newtab`. Consider reusing `useNow(deadline)` from
-`options/main.tsx` (already does exactly this "re-render when a wall-clock
-deadline passes" job) — worth extracting alongside `SettingsGate` when that
-extraction happens for the dashboard.
-
-**Tests to add**: `grantSettingsPass` rejects a correct password during
-active panic; `nav-guard` redirects to the panic page (not the gate) while
-active, and to the gate again once `panicUntil` has passed; a fake
-`browser.windows.onCreated` firing closes an incognito window while panic
-is active and leaves it alone once it isn't (needs the fake browser harness
-in `tests/setup.ts` extended with a minimal `windows` mock, similar to how
-`tabs.onCreated` was added for the `about:addons` fix in 1.4.1).
+- **Phase 5 — polish/packaging**: optional Node SEA packaging for the
+  native host, CI (`lint` + vitest), signed-`.xpi` release process.
+- Real-Mac verification checklist above.
