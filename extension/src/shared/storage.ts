@@ -4,6 +4,7 @@ import {
   DEFAULT_BLOCK_PRIVATE_BROWSING,
   DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS,
   DEFAULT_IDLE_TIMEOUT_MINUTES,
+  DEFAULT_PANIC_MINUTES,
   DEFAULT_WELCOME_MESSAGE,
   STORAGE_SCHEMA_VERSION,
 } from "./constants";
@@ -62,6 +63,12 @@ export interface PrivatefoxState {
    * rejects outright. Overrides settingsPassUntil while active.
    */
   panicUntil: number | null;
+  /**
+   * How long panic mode stays active once triggered, in minutes
+   * (clamped 1–60 by the options page). Used by activatePanicMode to
+   * compute the panicUntil deadline.
+   */
+  panicModeMinutes: number;
   /** Unlocks the browser. Typed often, so it lives in muscle memory. */
   passwordHash: HashedSecret | null;
   /**
@@ -95,6 +102,7 @@ export const DEFAULT_STATE: PrivatefoxState = {
   grantPrivateBrowsingAccess: DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS,
   settingsPassUntil: null,
   panicUntil: null,
+  panicModeMinutes: DEFAULT_PANIC_MINUTES,
   passwordHash: null,
   settingsPasswordHash: null,
   recoveryHash: null,

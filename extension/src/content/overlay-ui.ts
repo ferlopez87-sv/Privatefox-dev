@@ -16,28 +16,28 @@ const CSS = `
   :host { all: initial; }
   .backdrop {
     position: fixed; inset: 0; z-index: 2147483647;
-    background: #1c1b22; color: #fbfbfe;
+    background: #ffffff; color: #36454f;
     display: flex; align-items: center; justify-content: center;
-    font-family: -apple-system, "Segoe UI", sans-serif;
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
   }
   .panel { max-width: 26rem; width: 90%; text-align: center; }
-  h1 { font-size: 1.4rem; font-weight: 600; margin: 0 0 0.75rem; }
-  p.message { font-size: 1rem; opacity: 0.85; margin: 0 0 1.5rem; white-space: pre-wrap; }
+  h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.75rem; }
+  p.message { font-size: 1rem; color: #708090; margin: 0 0 1.5rem; white-space: pre-wrap; }
   form { display: flex; gap: 0.5rem; justify-content: center; }
   input {
     flex: 1; padding: 0.6rem 0.8rem; font-size: 1rem;
-    border-radius: 6px; border: 1px solid #5b5b66;
-    background: #2b2a33; color: #fbfbfe;
+    border-radius: 4px; border: 1px solid #d3d3d3;
+    background: #ffffff; color: #36454f;
   }
-  input:focus { outline: 2px solid #00ddff; border-color: transparent; }
+  input:focus { outline: 2px solid #708090; border-color: transparent; }
   button {
-    padding: 0.6rem 1.2rem; font-size: 1rem; border-radius: 6px;
-    border: none; background: #00ddff; color: #15141a;
+    padding: 0.6rem 1.2rem; font-size: 1rem; border-radius: 4px;
+    border: 1px solid #36454f; background: #36454f; color: #ffffff;
     font-weight: 600; cursor: pointer;
   }
-  .error { color: #ff9aa2; min-height: 1.25rem; margin-top: 0.75rem; font-size: 0.9rem; }
+  .error { color: #b33a3a; min-height: 1.25rem; margin-top: 0.75rem; font-size: 0.9rem; }
   .alt { margin-top: 1.25rem; font-size: 0.85rem; }
-  .alt a { color: #00ddff; cursor: pointer; text-decoration: underline; }
+  .alt a { color: #36454f; cursor: pointer; text-decoration: underline; }
 `;
 
 export class LockOverlay {

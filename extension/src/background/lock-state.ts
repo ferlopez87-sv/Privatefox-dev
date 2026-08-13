@@ -7,7 +7,6 @@ import {
 import { getState, setState, type PrivatefoxState } from "../shared/storage";
 import {
   EMAIL_CODE_TTL_MINUTES,
-  PANIC_MODE_MINUTES,
   SETTINGS_PASS_TTL_MINUTES,
 } from "../shared/constants";
 import { surfaceLockScreen } from "./surface-lock";
@@ -25,8 +24,13 @@ export function hasActivePanic(state: PrivatefoxState): boolean {
  * open. Revokes any pass already granted so nothing survives mid-session.
  */
 export async function activatePanicMode(): Promise<void> {
+  const state = await getState();
+  const minutes = Math.min(
+    Math.max(state.panicModeMinutes, 1),
+    60,
+  );
   await setState({
-    panicUntil: Date.now() + PANIC_MODE_MINUTES * 60_000,
+    panicUntil: Date.now() + minutes * 60_000,
     settingsPassUntil: null,
   });
   // Sweep private windows open at activation time. Only works when the

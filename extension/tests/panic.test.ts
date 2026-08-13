@@ -6,7 +6,7 @@ import {
   hasActivePanic,
   maybeCloseIncognitoWindow,
 } from "../src/background/lock-state";
-import { getState } from "../src/shared/storage";
+import { getState, setState } from "../src/shared/storage";
 import { makeFakeBrowser } from "./setup";
 
 let fake: ReturnType<typeof makeFakeBrowser>;
@@ -46,6 +46,20 @@ describe("panic mode state", () => {
     const state = await getState();
     expect(state.settingsPassUntil).toBeNull();
     expect(state.panicUntil).not.toBeNull();
+  });
+
+  it("honors a custom duration from the options page", async () => {
+    await completeSetup("browsing-pw");
+    await setState({ panicModeMinutes: 30 });
+
+    await activatePanicMode();
+
+    const state = await getState();
+    expect(state.panicUntil).not.toBeNull();
+    // 30 minutes of wall-clock from activation, not the 10-minute default.
+    const now = Date.now();
+    expect(state.panicUntil).toBeGreaterThan(now + 29 * 60_000);
+    expect(state.panicUntil).toBeLessThan(now + 31 * 60_000);
   });
 });
 

@@ -58,6 +58,15 @@ step("Install host binary", () => {
   mkdirSync(BIN_DIR, { recursive: true });
   copyFileSync(join(here, "privatefox-host.cjs"), HOST_BINARY);
   chmodSync(HOST_BINARY, 0o755);
+  // Firefox spawns the host directly (no shell), with a minimal PATH
+  // (/usr/bin:/bin) from Finder/launchd. The bundled shebang
+  // `#!/usr/bin/env node` then fails with exit 127 ("env: node: No such
+  // file or directory") unless node is on that PATH. Rewrite the shebang
+  // to the absolute interpreter used to run this installer.
+  const contents = readFileSync(HOST_BINARY, "utf8").split("\n");
+  contents[0] = `#!${process.execPath}`;
+  writeFileSync(HOST_BINARY, contents.join("\n"));
+  chmodSync(HOST_BINARY, 0o755);
   return HOST_BINARY;
 });
 

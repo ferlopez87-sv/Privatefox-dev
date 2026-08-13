@@ -4,10 +4,32 @@ import { usePrivatefoxState, sendToBackground } from "../ui/state";
 import { SettingsGate, useNow } from "../ui/settings-gate";
 import { setState as patchState } from "../shared/storage";
 import {
-  PANIC_MODE_MINUTES,
+  MAX_PANIC_MINUTES,
+  MIN_PANIC_MINUTES,
   SETTINGS_PASS_TTL_MINUTES,
 } from "../shared/constants";
+import { StatsTab } from "./stats-tab";
 import "../ui/styles.css";
+
+type TabId = "general" | "protection" | "stats" | "passwords";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "general", label: "General" },
+  { id: "protection", label: "Protection" },
+  { id: "stats", label: "Usage stats" },
+  { id: "passwords", label: "Passwords" },
+];
+
+function tabFromUrl(): TabId {
+  const param = new URLSearchParams(window.location.search).get("tab");
+  return TABS.some((t) => t.id === param) ? (param as TabId) : "general";
+}
+
+function setTab(tab: TabId): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set("tab", tab);
+  window.history.replaceState(null, "", url);
+}
 
 /** Welcome message + idle timeout + recovery email: editable without a password. */
 function GeneralSettings(props: {
@@ -20,7 +42,6 @@ function GeneralSettings(props: {
   const [email, setEmail] = useState(props.recoveryEmail);
   const [status, setStatus] = useState("");
 
-  // Sync from storage when it changes elsewhere.
   useEffect(() => setMessage(props.welcomeMessage), [props.welcomeMessage]);
   useEffect(
     () => setMinutes(String(props.idleTimeoutMinutes)),
@@ -75,11 +96,6 @@ function GeneralSettings(props: {
   );
 }
 
-/**
- * Protection toggles that map to Firefox Enterprise Policies. These cannot be
- * enforced by the extension alone — they take effect only once the Privatefox
- * native host has (re)written policies.json and Firefox has been restarted.
- */
 /** Rejects only schemes that could do something surprising once landed on. */
 function isSafeRedirectUrl(url: string): boolean {
   const trimmed = url.trim().toLowerCase();
@@ -312,8 +328,6 @@ function PasswordSettings(props: { hasPassword: boolean }) {
   );
 }
 
-
-
 /**
  * The second password: guards Firefox preferences, about:addons and this
  * page. Separate from the browsing password on purpose — that one is typed
@@ -442,6 +456,98 @@ function SettingsPasswordSettings(props: { hasSettingsPassword: boolean }) {
   );
 }
 
+/** Panic duration is user-configurable (clamped 1–60 minutes). */
+function PanicSettings(props: {
+  panicModeMinutes: number;
+  panicActive: boolean;
+}) {
+  const [minutes, setMinutes] = useState(String(props.panicModeMinutes));
+  const [status, setStatus] = useState("");
+
+  useEffect(
+    () => setMinutes(String(props.panicModeMinutes)),
+    [props.panicModeMinutes],
+  );
+
+  const save = async () => {
+    const parsed = Number(minutes);
+    if (!Number.isInteger(parsed) || parsed < MIN_PANIC_MINUTES || parsed > MAX_PANIC_MINUTES) {
+      setStatus(
+        `Duration must be a whole number between ${MIN_PANIC_MINUTES} and ${MAX_PANIC_MINUTES} minutes.`,
+      );
+      return;
+    }
+    await patchState({ panicModeMinutes: parsed });
+    setStatus("Saved.");
+    setTimeout(() => setStatus(""), 2000);
+  };
+
+  return (
+    <section>
+      <h2>Panic mode</h2>
+      <p class="hint">
+        Emergency: for the configured minutes no password can open the
+        protected surfaces (not even the correct one), and private windows
+        opened during the window are closed automatically.
+      </p>
+      {props.panicActive && (
+        <p class="hint">
+          <strong>Panic mode is active right now.</strong> Changing the
+          duration here does not affect the current window — it applies the
+          next time you trigger it.
+        </p>
+      )}
+      <label>Panic mode duration (minutes)</label>
+      <input
+        type="number"
+        min={MIN_PANIC_MINUTES}
+        max={MAX_PANIC_MINUTES}
+        step={1}
+        value={minutes}
+        onInput={(e) => setMinutes((e.target as HTMLInputElement).value)}
+      />
+      <div class="success">{status}</div>
+      <div class="row">
+        <button class="secondary" onClick={() => void save()}>
+          Save duration
+        </button>
+        <button
+          class="secondary"
+          onClick={() =>
+            void sendToBackground({ kind: "activate-panic-mode" })
+          }
+        >
+          Activate panic mode now
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function LockActions() {
+  return (
+    <section>
+      <h2>Lock</h2>
+      <div class="row">
+        <button
+          class="secondary"
+          onClick={() => void sendToBackground({ kind: "lock-now" })}
+        >
+          Lock the browser now
+        </button>
+        <button
+          class="secondary"
+          onClick={() =>
+            void sendToBackground({ kind: "revoke-settings-pass" })
+          }
+        >
+          Close preferences
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function PanicScreen(props: { until: number }) {
   const remaining = Math.max(0, Math.ceil((props.until - Date.now()) / 1000));
   const min = Math.floor(remaining / 60);
@@ -471,6 +577,7 @@ function PanicScreen(props: { until: number }) {
 
 function App() {
   const state = usePrivatefoxState();
+  const [tab, setTabState] = useState<TabId>(tabFromUrl);
   // Hooks must run unconditionally, so this sits above the early returns.
   const now = useNow(state?.settingsPassUntil ?? null);
   const panicNow = useNow(state?.panicUntil ?? null);
@@ -510,80 +617,68 @@ function App() {
   // rather than leaving the settings on screen until something else changes.
   if (!passValid) return <SettingsGate />;
 
+  const selectTab = (id: TabId) => {
+    setTabState(id);
+    setTab(id);
+  };
+
   return (
-    <main>
-      <h1>Privatefox Options</h1>
-      <GeneralSettings
-        welcomeMessage={state.welcomeMessage}
-        idleTimeoutMinutes={state.idleTimeoutMinutes}
-        recoveryEmail={state.recoveryEmail}
-      />
-      <ProtectionSettings
-        blockPrivateBrowsing={state.blockPrivateBrowsing}
-        blockAboutAddons={state.blockAboutAddons}
-        grantPrivateBrowsingAccess={state.grantPrivateBrowsingAccess}
-        postGateRedirectUrl={state.postGateRedirectUrl}
-      />
-      <PasswordSettings hasPassword={state.passwordHash !== null} />
-      <SettingsPasswordSettings
-        hasSettingsPassword={state.settingsPasswordHash !== null}
-      />
-      <section>
-        <h2>Lock</h2>
-        <div class="row">
-          <button
-            class="secondary"
-            onClick={() => void sendToBackground({ kind: "lock-now" })}
-          >
-            Lock the browser now
-          </button>
-          <button
-            class="secondary"
-            onClick={() =>
-              void sendToBackground({ kind: "revoke-settings-pass" })
-            }
-          >
-            Close preferences
-          </button>
+    <main class="options">
+      <aside class="rail">
+        <div class="brand">
+          <strong>Privatefox</strong>
+          <span class={state.locked ? "dot locked" : "dot unlocked"} />
         </div>
-      </section>
-
-      <section>
-        <h2>Panic mode</h2>
-        <p class="hint">
-          Emergency: for {PANIC_MODE_MINUTES} minutes no password can open
-          the protected surfaces (not even the correct one), and private
-          windows opened during the window are closed automatically.
-        </p>
-        <div class="row">
-          <button
-            class="secondary"
-            onClick={() =>
-              void sendToBackground({ kind: "activate-panic-mode" })
-            }
-          >
-            Activate panic mode now
-          </button>
-        </div>
-      </section>
-
-      <section>
-        <h2>Usage statistics</h2>
-        <p class="hint">
-          Track opens, unlocks, and time spent per domain — entirely local,
-          never sent anywhere.{" "}
-          <span
-            class="link"
-            onClick={() =>
-              void browser.tabs.create({
-                url: browser.runtime.getURL("src/dashboard/index.html"),
-              })
-            }
-          >
-            Open dashboard
-          </span>
-        </p>
-      </section>
+        <nav class="tabs">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              class={tab === t.id ? "tab active" : "tab"}
+              onClick={() => selectTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+      <div class="panel">
+        <h1>Privatefox Options</h1>
+        {tab === "general" && (
+          <>
+            <GeneralSettings
+              welcomeMessage={state.welcomeMessage}
+              idleTimeoutMinutes={state.idleTimeoutMinutes}
+              recoveryEmail={state.recoveryEmail}
+            />
+            <LockActions />
+          </>
+        )}
+        {tab === "protection" && (
+          <>
+            <ProtectionSettings
+              blockPrivateBrowsing={state.blockPrivateBrowsing}
+              blockAboutAddons={state.blockAboutAddons}
+              grantPrivateBrowsingAccess={state.grantPrivateBrowsingAccess}
+              postGateRedirectUrl={state.postGateRedirectUrl}
+            />
+            <div class="panic-box">
+              <PanicSettings
+                panicModeMinutes={state.panicModeMinutes}
+                panicActive={panicActive}
+              />
+            </div>
+          </>
+        )}
+        {tab === "stats" && <StatsTab />}
+        {tab === "passwords" && (
+          <>
+            <PasswordSettings hasPassword={state.passwordHash !== null} />
+            <SettingsPasswordSettings
+              hasSettingsPassword={state.settingsPasswordHash !== null}
+            />
+          </>
+        )}
+      </div>
     </main>
   );
 }

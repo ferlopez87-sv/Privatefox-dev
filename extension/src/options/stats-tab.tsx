@@ -1,8 +1,11 @@
-import { render } from "preact";
-import { usePrivatefoxState, sendToBackground } from "../ui/state";
-import { SettingsGate, useNow } from "../ui/settings-gate";
-import { useStats } from "./use-stats";
-import "../ui/styles.css";
+import { useEffect, useState } from "preact/hooks";
+import {
+  getStats,
+  aggregateDomainTotals,
+  STATS_KEY,
+  type PrivatefoxStats,
+  type DomainStat,
+} from "../shared/stats-storage";
 
 function formatDuration(ms: number): string {
   const totalSec = Math.round(ms / 1000);
@@ -15,31 +18,40 @@ function formatDuration(ms: number): string {
   return `${hr}h ${remMin}m`;
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00Z");
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function useStats(): {
+  stats: PrivatefoxStats | null;
+  domains: DomainStat[];
+} {
+  const [stats, setStats] = useState<PrivatefoxStats | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const s = await getStats();
+      if (!cancelled) setStats(s);
+    };
+    void load();
+
+    const listener = (
+      changes: Record<string, browser.storage.StorageChange>,
+      areaName: string,
+    ) => {
+      if (areaName !== "local" || !changes[STATS_KEY]) return;
+      void load();
+    };
+    browser.storage.onChanged.addListener(listener);
+    return () => {
+      cancelled = true;
+      browser.storage.onChanged.removeListener(listener);
+    };
+  }, []);
+
+  const domains = stats ? aggregateDomainTotals(stats) : [];
+  return { stats, domains };
 }
 
-function App() {
-  const state = usePrivatefoxState();
-  const now = useNow(state?.settingsPassUntil ?? null);
+export function StatsTab() {
   const { stats, domains } = useStats();
-
-  if (!state) return null;
-
-  const passValid =
-    state.settingsPassUntil !== null && now < state.settingsPassUntil;
-
-  if (!state.setupComplete) {
-    return (
-      <main>
-        <h1>Usage statistics</h1>
-        <p>Complete setup before stats begin tracking.</p>
-      </main>
-    );
-  }
-
-  if (!passValid) return <SettingsGate />;
 
   const topDomain = domains[0];
   const maxDomainMs = topDomain ? topDomain.totalMs : 1;
@@ -48,8 +60,7 @@ function App() {
   const totalUnlocks = stats?.totalUnlocks ?? 0;
 
   return (
-    <main class="dashboard">
-      <h1>Usage statistics</h1>
+    <section>
       <p class="hint">
         All data stays on this device — it is never sent anywhere.
       </p>
@@ -95,8 +106,6 @@ function App() {
         Private-window tracking takes effect after the native host is
         installed, grantPrivateBrowsingAccess is on, and Firefox restarts.
       </p>
-    </main>
+    </section>
   );
 }
-
-render(<App />, document.getElementById("app")!);

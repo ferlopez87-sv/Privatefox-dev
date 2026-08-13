@@ -20,9 +20,9 @@ function openPreferences() {
   window.close();
 }
 
-function openDashboard() {
+function openStatsTab() {
   void browser.tabs.create({
-    url: browser.runtime.getURL("src/dashboard/index.html"),
+    url: browser.runtime.getURL("src/options/index.html?tab=stats"),
   });
   window.close();
 }
@@ -86,7 +86,7 @@ function App() {
         </button>
       </div>
       <div class="row">
-        <button class="secondary" onClick={openDashboard}>
+        <button class="secondary" onClick={openStatsTab}>
           Usage stats
         </button>
       </div>

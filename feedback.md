@@ -31,6 +31,19 @@ it done. Build a test harness that can fire the *actual* event shapes
 shipping — this is now permanent in `extension/tests/nav-guard.test.ts`,
 and it's what would have caught both failures on the first try.
 
+## Infinite event loops on redirects (v1.8.1)
+
+Even after fixing the `tabs` permission, the `about:addons` gate froze the browser entirely. 
+Root cause: `tabs.update` triggers a new `tabs.onUpdated` event for the target tab before the redirect is complete. Because the redirect is still in flight, the old `about:addons` URL may still be present in the tab object. The listener saw `about:addons` again, triggered another redirect, and created an infinite event loop that locked the Firefox event thread.
+
+**Lesson**: Whenever your listener reacts to a URL by issuing a `tabs.update`, you must introduce a concurrency guard (e.g., a `Set<number>` for tab IDs with a short cooldown) to drop re-entrant events for the same tab while the redirect is processing.
+
+## browser.storage.local is not memory (v1.8.1)
+
+The usage statistics feature (`stats-tracker.ts`) tracked dwell time per domain by writing to `browser.storage.local` on every single tab switch or focus change. While `storage.local` is fast, reading and writing a 30-day JSON object (potentially hundreds of KB) multiple times a minute caused severe CPU and disk I/O overhead on macOS.
+
+**Lesson**: For high-frequency events like tab switching or mouse movements, never write directly to disk/storage. Aggregate the data in memory (`statsCache`) and flush it using a debounced timer (e.g., every 5 seconds) and on `browser.runtime.onSuspend`.
+
 ## Flipping a boolean in storage is not the same as a visible effect
 
 `lock()` only set `state.locked = true`. That's sufficient for ordinary web

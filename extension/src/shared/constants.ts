@@ -71,7 +71,13 @@ export const STORAGE_SCHEMA_VERSION = 1;
 export const DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS = true;
 
 /**
- * How long panic mode stays active once triggered, in minutes. Hardcoded
- * per the user's spec — there is deliberately no UI to change the duration.
+ * Default duration of panic mode, in minutes. User-configurable via the
+ * options page (panicModeMinutes, clamped 1–60); this constant is the
+ * default for fresh installs and the fallback if the stored value is out
+ * of range.
  */
-export const PANIC_MODE_MINUTES = 10;
+export const DEFAULT_PANIC_MINUTES = 10;
+
+/** Smallest/largest duration the options page accepts for panic mode. */
+export const MIN_PANIC_MINUTES = 1;
+export const MAX_PANIC_MINUTES = 60;

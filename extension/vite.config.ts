@@ -14,7 +14,6 @@ export default defineConfig({
         html: [
           "src/setup/index.html",
           "src/gate/index.html",
-          "src/dashboard/index.html",
           "src/panic/index.html",
         ],
       },

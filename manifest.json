@@ -1,0 +1,68 @@
+{
+  "manifest_version": 3,
+  "name": "Privatefox Lock",
+  "version": "1.7.0",
+  "description": "Locks Firefox behind a password: on startup, after inactivity, and on demand.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "lock@privatefox.local",
+      "strict_min_version": "115.0"
+    }
+  },
+  "background": {
+    "type": "module",
+    "page": "background.html"
+  },
+  "permissions": [
+    "storage",
+    "idle",
+    "tabs",
+    "webNavigation",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/overlay.js"
+      ],
+      "all_frames": false,
+      "run_at": "document_start"
+    }
+  ],
+  "chrome_url_overrides": {
+    "newtab": "src/newtab/index.html"
+  },
+  "options_ui": {
+    "page": "src/options/index.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_title": "Privatefox Lock",
+    "default_popup": "src/popup/index.html"
+  },
+  "icons": {
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/src/content/overlay-D9IDbS-v.js",
+        "assets/storage-CypgN6sh.js",
+        "src/dashboard/index.html",
+        "src/gate/index.html",
+        "src/panic/index.html",
+        "src/setup/index.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

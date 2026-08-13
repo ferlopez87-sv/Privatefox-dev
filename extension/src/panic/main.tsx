@@ -1,7 +1,6 @@
 import { render } from "preact";
 import { usePrivatefoxState } from "../ui/state";
 import { useNow } from "../ui/settings-gate";
-import { PANIC_MODE_MINUTES } from "../shared/constants";
 import "../ui/styles.css";
 
 function formatUntil(until: number): string {
@@ -40,7 +39,7 @@ function App() {
     <main class="centered">
       <h1>Panic mode active</h1>
       <p class="message">
-        For the next {PANIC_MODE_MINUTES} minutes, the protected pages
+        For the next {state.panicModeMinutes} minutes, the protected pages
         (Firefox preferences, about:addons, Privatefox options) are blocked
         and <strong>no password will open them</strong> — not even the
         correct one. Private windows opened during this window are closed
