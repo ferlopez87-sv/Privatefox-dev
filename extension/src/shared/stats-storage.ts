@@ -10,6 +10,12 @@
  * buckets keep the shape bounded (~31 keys) and pruning O(days), not
  * O(events); there is no separate compaction pass or alarm, every write
  * opportunistically prunes first.
+ *
+ * v1.8.1: stats are now cached in memory and flushed to disk on a debounced
+ * timer (FLUSH_DELAY_MS). This eliminates the per-tab-switch read+write
+ * cycle that was the main source of background-page CPU/disk usage. The
+ * cache is flushed immediately on browser.runtime.onSuspend so no data is
+ * lost when Firefox unloads the background page.
  */
 interface StorageArea {
   get(key: string): Promise<Record<string, unknown>>;
@@ -99,7 +105,69 @@ export function aggregateDomainTotals(stats: PrivatefoxStats): DomainStat[] {
   return [...totals.values()].sort((a, b) => b.totalMs - a.totalMs);
 }
 
+// ---------------------------------------------------------------------------
+// In-memory cache + debounced flush
+// ---------------------------------------------------------------------------
+
+/** How long (ms) to wait after the last setStats before flushing to disk. */
+const FLUSH_DELAY_MS = 5_000;
+
+/** The in-memory copy of stats; null means "not yet loaded from storage". */
+let statsCache: PrivatefoxStats | null = null;
+
+/** Handle for the pending flush timer, so we can cancel/reschedule. */
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Whether a flush to disk is currently in progress (avoids overlapping writes). */
+let flushInProgress = false;
+
+/**
+ * Immediately persists the in-memory cache to browser.storage.local.
+ * Safe to call multiple times concurrently — only one write runs at a time;
+ * if called while a write is in flight, the next flush will pick up the
+ * latest cache value.
+ */
+export async function flushStatsNow(): Promise<void> {
+  if (flushTimer !== null) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  if (!statsCache || flushInProgress) return;
+  flushInProgress = true;
+  try {
+    await area().set({ [STATS_KEY]: statsCache });
+  } finally {
+    flushInProgress = false;
+  }
+}
+
+/** Schedules a disk flush after FLUSH_DELAY_MS, resetting any pending timer. */
+function scheduleDiskFlush(): void {
+  if (flushTimer !== null) clearTimeout(flushTimer);
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    void flushStatsNow();
+  }, FLUSH_DELAY_MS);
+}
+
+/**
+ * Call once from the background entry point. Hooks into onSuspend so the
+ * cache is persisted before Firefox unloads the non-persistent background.
+ */
+export function registerStatsFlush(): void {
+  if (typeof browser !== "undefined" && browser.runtime?.onSuspend) {
+    browser.runtime.onSuspend.addListener(() => {
+      void flushStatsNow();
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API (unchanged signatures, now cache-backed)
+// ---------------------------------------------------------------------------
+
 export async function getStats(): Promise<PrivatefoxStats> {
+  if (statsCache) return statsCache;
   const result = await area().get(STATS_KEY);
   const stored = result[STATS_KEY] as Partial<PrivatefoxStats> | undefined;
   const merged: PrivatefoxStats = {
@@ -107,7 +175,8 @@ export async function getStats(): Promise<PrivatefoxStats> {
     ...stored,
     days: { ...DEFAULT_STATS.days, ...stored?.days },
   };
-  return pruneStats(merged, Date.now());
+  statsCache = pruneStats(merged, Date.now());
+  return statsCache;
 }
 
 export async function setStats(
@@ -115,7 +184,8 @@ export async function setStats(
 ): Promise<PrivatefoxStats> {
   const current = await getStats();
   const next = pruneStats({ ...current, ...patch }, Date.now());
-  await area().set({ [STATS_KEY]: next });
+  statsCache = next;
+  scheduleDiskFlush();
   return next;
 }
 
@@ -164,3 +234,16 @@ export async function recordDwellTime(
     },
   });
 }
+
+/**
+ * Resets the in-memory cache. Exposed for testing only — production code
+ * should never call this.
+ */
+export function _resetStatsCache(): void {
+  statsCache = null;
+  if (flushTimer !== null) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+}
+

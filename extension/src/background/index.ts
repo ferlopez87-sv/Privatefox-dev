@@ -11,12 +11,13 @@ import { registerNavGuard } from "./nav-guard";
 import { registerStatsTracker } from "./stats-tracker";
 import { lock, maybeCloseIncognitoWindow } from "./lock-state";
 import { getState } from "../shared/storage";
-import { recordOpen } from "../shared/stats-storage";
+import { recordOpen, registerStatsFlush } from "../shared/stats-storage";
 
 registerRouter();
 registerIdleListener();
 registerNavGuard();
 registerStatsTracker();
+registerStatsFlush();
 
 // Lock on every browser startup.
 browser.runtime.onStartup.addListener(() => {

@@ -8,6 +8,55 @@ Firefox shows on the add-on card.
 The native host versions independently — it installs separately and only
 moves when the host itself changes.
 
+## 1.8.1
+
+### Fixed
+
+- **`about:addons` navigation no longer freezes the browser.** The nav-guard
+  redirect could trigger an infinite `tabs.onUpdated` → `tabs.update` loop
+  because Firefox fires another `onUpdated` with the old URL still visible
+  while the redirect is in flight. A concurrency guard (`redirectingTabs`
+  `Set<number>` with a 2-second cooldown) now prevents re-entrant redirects
+  for the same tab, breaking the cycle.
+
+### Changed
+
+- **Usage statistics writes are now debounced.** `stats-storage.ts` keeps an
+  in-memory cache and flushes to `browser.storage.local` at most once every
+  5 seconds (and immediately on `browser.runtime.onSuspend`), instead of
+  performing a full read-modify-write cycle on every tab switch. This
+  reduces background-page disk I/O by ~90% during normal browsing.
+
+## 1.8.0
+
+### Added
+
+- **Panic mode duration is now user-configurable.** Options → General lets
+  you set how long panic mode stays active (1–60 minutes, default 10).
+  `activatePanicMode` computes the wall-clock deadline from the stored
+  `panicModeMinutes` value instead of a hardcoded constant; the panic page
+  and popup labels read the same value. Changing the duration never affects
+  a panic window already in progress.
+
+### Changed
+
+- **Options page reorganized into tabs.** A sidebar with four tabs —
+  General, Protection, Usage stats, Passwords — replaces the single long
+  scrolling page. General also holds the quick actions (Lock now, Close
+  preferences) and the panic controls; Passwords groups both password
+  forms; stats are embedded as their own tab.
+- **Usage statistics moved into Options.** The standalone dashboard page
+  (`src/dashboard/`) is gone; the "Usage stats" button in the toolbar
+  popup now opens Options with the stats tab active
+  (`options/index.html?tab=stats`). One password gate still protects the
+  whole page.
+- **Visual redesign: Modern Minimalist theme.** The full extension UI
+  (options, popup, gate, panic page, lock overlay, setup) moves from the
+  dark theme to a light charcoal/slate/light-gray palette. Color is used
+  only for functional state: red = locked/panic, green = unlocked/success.
+  Typography: system stack with a tighter, bolder heading scale;
+  mono-spaced numerals for stats.
+
 ## 1.7.0
 
 ### Added

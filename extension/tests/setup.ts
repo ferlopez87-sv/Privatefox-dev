@@ -127,6 +127,7 @@ export function makeFakeBrowser(tabs: FakeTab[] = []) {
       onStartup: { addListener() {} },
       onInstalled: { addListener() {} },
       onMessage: { addListener() {} },
+      onSuspend: { addListener() {} },
     },
   };
 }

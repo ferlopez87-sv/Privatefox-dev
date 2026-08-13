@@ -45,15 +45,35 @@ export function isGatedUrl(url: string): boolean {
   return GATED_PAGES.some((p) => url.startsWith(p));
 }
 
+/**
+ * Tabs currently being redirected. While a tab ID is in this set, further
+ * onUpdated / onCreated events for it are ignored. This breaks the infinite
+ * event loop that previously froze the browser: tabs.update fires another
+ * onUpdated with the old about: URL still visible, which re-triggers the
+ * guard, which calls tabs.update again, ad infinitum.
+ *
+ * The ID is removed after a short delay so that a *real* re-navigation
+ * (e.g. the user types about:addons into the address bar a second time)
+ * is still caught.
+ */
+const redirectingTabs = new Set<number>();
+
+/** How long (ms) a tab stays in the redirect-guard after a redirect. */
+const REDIRECT_COOLDOWN_MS = 2_000;
+
 /** Decide what to do about one tab currently pointing at `url`. */
 async function guardTab(
   tabId: number | undefined,
   url: string | undefined,
 ): Promise<void> {
   if (tabId === undefined || !url || !isGatedUrl(url)) return;
+  if (redirectingTabs.has(tabId)) return;
 
   const state = await getState();
   if (!state.setupComplete) return;
+
+  redirectingTabs.add(tabId);
+  setTimeout(() => redirectingTabs.delete(tabId), REDIRECT_COOLDOWN_MS);
 
   try {
     // While locked, the lock screen is the only thing that should be
@@ -90,4 +110,9 @@ export function registerNavGuard(): void {
   browser.tabs.onCreated.addListener((tab) => {
     void guardTab(tab.id, tab.url);
   });
+}
+
+/** Exposed for testing only. */
+export function _resetRedirectingTabs(): void {
+  redirectingTabs.clear();
 }
