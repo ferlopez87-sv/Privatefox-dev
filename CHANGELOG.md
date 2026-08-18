@@ -8,6 +8,57 @@ Firefox shows on the add-on card.
 The native host versions independently — it installs separately and only
 moves when the host itself changes.
 
+## 2.1.2
+
+### Fixed
+
+- **The settings gate appeared to reject a correct password.** Entering it
+  granted the pass but the tab never moved, so the gate kept asking.
+  `src/gate/` forwarded with `location.replace()`, which Firefox refuses
+  when an extension page navigates to a privileged `about:` URL — and the
+  gate's targets (`about:addons`, `about:preferences`, `about:debugging`,
+  `about:profiles`) are all privileged. Forwarding now goes through the
+  tabs API, which the same file already used for its "Go back" link.
+  - Masked until now by a configured `postGateRedirectUrl`: an `https:`
+    destination navigates fine with `location`, so the bug only surfaced
+    with that preference empty — its default.
+  - `postUnlockRedirectUrl` had the same latent flaw and is fixed by the
+    same change: an `about:` start page would silently have done nothing.
+
+### Changed
+
+- `shared/url.ts` gained `navigateTab()`, which prefers `browser.tabs` and
+  falls back to `location` for content scripts (which are not given the tabs
+  API, and only ever navigate to pages `location` can reach anyway).
+
+## Native host 1.3.0
+
+### Fixed
+
+- **The enforcement layer never installed on non-release Firefox.**
+  `write-policy-file.ts` hardcoded `/Applications/Firefox.app`, so on a Mac
+  running Developer Edition, Nightly or ESR `writePolicyFile` threw
+  "Firefox not found", the installer printed one ✘ among five steps and
+  carried on, and `policies.json` was never written at all — no
+  force-install, no `BlockAboutAddons`, no `private_browsing` key (which
+  the dynamic private-window block depends on). Replaced with
+  `findFirefoxApps()`, which detects the release, Developer Edition,
+  Nightly and ESR bundles in `/Applications` and `~/Applications`, with
+  `PRIVATEFOX_FIREFOX_APP` as an explicit override.
+- **The policy-guard LaunchAgent watched a path that did not exist** on
+  those same installs (`/Applications/Firefox.app/Contents/MacOS/firefox`),
+  so it could never fire after an auto-update — precisely the case it was
+  written for. `WatchPaths` is now generated from the detected installs.
+
+### Changed
+
+- `installPolicy` writes to **every** detected Firefox install rather than
+  one, since a second Firefox channel is otherwise a one-click way around
+  the lock. Partial failures (one bundle writable, another not) are
+  reported per bundle instead of collapsing into a single error.
+- The installer gained a "Detect Firefox installs" step, so a machine with
+  no recognised Firefox fails loudly and early instead of four steps in.
+
 ## 2.1.1
 
 ### Fixed

@@ -2,6 +2,7 @@ import { render } from "preact";
 import { useState } from "preact/hooks";
 import { sendToBackground, usePrivatefoxState } from "../ui/state";
 import { SETTINGS_PASS_TTL_MINUTES, GATED_PAGES } from "../shared/constants";
+import { navigateTab } from "../shared/url";
 import "../ui/styles.css";
 
 /**
@@ -46,7 +47,12 @@ function App() {
       // Pass granted: nav-guard now lets this navigation through. Go to the
       // configured redirect if the user set one, otherwise the page that
       // was actually requested.
-      location.replace(state?.postGateRedirectUrl || target);
+      //
+      // Must go through the tabs API: `target` is normally a privileged
+      // about: page, and location.replace() cannot navigate an extension
+      // page to one — Firefox blocks it silently, leaving the gate on
+      // screen looking like it rejected a correct password.
+      navigateTab(state?.postGateRedirectUrl || target);
     } finally {
       setBusy(false);
     }

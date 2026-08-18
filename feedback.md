@@ -145,6 +145,68 @@ faking the clock. Fake timers are fine for pure synchronous asserts
 (lock-state's TTL tests) but never around `_fireUpdated`/`_fireCreated` —
 those await the real-timer flush.
 
+## The enforcement layer was never installed, for months, silently
+
+Investigating a lockout on the user's Mac turned up no `policies.json`
+anywhere. Root cause: `write-policy-file.ts` hardcoded
+`/Applications/Firefox.app`, and the user runs **Firefox Developer
+Edition**. `writePolicyFile` threw "Firefox not found", `install.ts` caught
+it, printed one `✘` among five `✔` steps, and kept going to a cheerful
+"Done. Quit Firefox completely..." So force-install, `BlockAboutAddons` and
+the `private_browsing` key never existed — everything the threat model
+calls "the actual enforcement mechanism" was off the whole time, while both
+the docs and the options UI said it was on. The LaunchAgent that re-installs
+policies after an update had the same hardcoded path, so it could never have
+fired either.
+
+Two compounding mistakes, neither caught by tests: the tests always passed
+an explicit `firefoxApp` argument, so the default value — the only part that
+runs in production — was never exercised. And a step that fails inside a
+loop of "steps" that each catch their own error reads as success at a
+glance.
+
+**Lesson**: when a default parameter value *is* the production configuration,
+test the default, not just the injected value. And an installer that
+continues past a failed step must not end with an unconditional success
+message — either abort, or summarise which steps actually failed.
+
+## Do not assume a documented risk is the same as current behavior
+
+While helping with that lockout I told the user `about:debugging` was
+reachable, citing CLAUDE.md's "Known risks" section which lists it as out of
+scope for blocking. The code had gated it for some time —
+`GATED_PAGES` in `shared/constants.ts` includes both `about:debugging` and
+`about:profiles`. The user was the one who corrected it, from the gate
+screen they were staring at.
+
+**Lesson**: the docs in this repo describe intent at the time of writing and
+drift from the code. For any claim about what is or is not enforced, read
+the constant/the call site first — especially when the user is depending on
+the answer to get out of a lockout.
+
+## The gate could never forward to the page it was guarding (2.1.2)
+
+The settings gate granted the pass correctly and then called
+`location.replace("about:addons")`. Firefox blocks an extension page from
+navigating itself to a privileged `about:` URL, so nothing happened and the
+gate sat there — indistinguishable, to the user, from the password being
+rejected. Every target in `GATED_PAGES` is such a URL, so the success path
+had never actually worked.
+
+Two things kept it hidden. The user had `postGateRedirectUrl` set to an
+`https:` page, which `location` navigates to happily; the bug only appeared
+once that preference went back to its empty default. And the answer was
+sitting nine lines below the bug in the same file: the "Go back" link used
+`browser.tabs.update({url: "about:newtab"})`, because whoever wrote it hit
+this exact restriction there and worked around it locally instead of
+noticing it applied to the success path too.
+
+**Lesson**: when a workaround appears in a file, check whether the
+constraint it works around applies to the rest of that file. And test the
+*success* path of a gate end to end — every nav-guard test asserted where
+the redirect went, none asserted that entering the password got you to the
+page. `nav-guard.test.ts` now has that round trip.
+
 ## Practices that worked well — keep doing these- **Every shipped change bumps `extension/package.json`'s version and adds
   a `CHANGELOG.md` entry, in the same commit.** Added mid-project at the
   user's request; never skip it — the user installs `.xpi`/`.zip` files by

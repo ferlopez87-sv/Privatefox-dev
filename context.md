@@ -24,11 +24,16 @@ writing any code:
    The version number and latest commits may have moved since this file was
    last edited — trust the repo over this document if they disagree, and
    update this file to match once you notice drift.
-3. **What has shipped:** Phase 6 (local usage statistics dashboard) shipped
-   as **1.6.0**; panic mode shipped as **1.7.0**. Both are on `main` and the
-   feature branch. The two previously-unverified external facts are now
-   VERIFIED (below) and baked into the code comments and docs.
-4. **What is NOT done (real-Mac manual QA only)** — cannot be exercised in a
+3. **UNCOMMITTED WORK IS SITTING IN THE TREE** (as of the 2026-08-17
+   session end). 14 modified files, nothing untracked, last commit is
+   `c337b85 New version`. Extension **2.1.2**, native host **1.3.0** —
+   both bumped with CHANGELOG entries but not committed. Read
+   `git status` before doing anything; do not re-do this work.
+4. **What has shipped:** Phase 6 (local usage statistics dashboard) shipped
+   as **1.6.0**; panic mode shipped as **1.7.0**. The two previously-
+   unverified external facts are now VERIFIED (below) and baked into the
+   code comments and docs.
+5. **What is NOT done (real-Mac manual QA only)** — cannot be exercised in a
    sandbox, so never claim it is covered:
    - Private-window tracking actually covering private windows after the
      native host writes the `private_browsing` policy key + restart.
@@ -146,6 +151,53 @@ the visible open/close flash is tolerable in practice.
 (overlay, `assign`). Recovery/email unlocks intentionally skip it. QA on a
 real Mac: unlock from the lock screen and from the overlay, confirm only the
 active tab moves and Back behaves as described.
+
+## Firefox-install detection (native host 1.3.0)
+
+`FIREFOX_APP` was hardcoded to `/Applications/Firefox.app`; the user runs
+Developer Edition, so `policies.json` had never been written on their
+machine and the whole enforcement layer was inert (see feedback.md).
+`findFirefoxApps()` now detects release/Developer Edition/Nightly/ESR in
+`/Applications` and `~/Applications`, `PRIVATEFOX_FIREFOX_APP` overrides it,
+and `installPolicy` writes to every detected install. The LaunchAgent's
+`WatchPaths` is generated from the same list.
+
+**Not verified, and cannot be here:** that a real `install-host` run writes
+policies.json into Developer Edition and that the LaunchAgent fires after an
+auto-update. Needs a signed `.xpi` first — the user has none, so the policy
+layer stays off until they decide to turn it on.
+
+**Deliberately not done** (user declined, 2026-08-17): adding
+`DisableProfileRefresh` / `DisableSafeMode`. Refresh Firefox is currently an
+open bypass — it moves the profile aside and drops every extension — but
+blocking Troubleshoot Mode also removes the user's own escape hatch, which
+matters given this extension has frozen the browser twice.
+
+## Settings-gate forwarding fix (2.1.2)
+
+The gate granted the pass and then called `location.replace("about:addons")`,
+which Firefox blocks for an extension page navigating to a privileged
+`about:` URL — so the gate sat there looking like it had rejected a correct
+password. `navigateTab()` in `shared/url.ts` now prefers `browser.tabs`,
+falling back to `location` only for content scripts. `nav-guard.test.ts`
+gained the round trip that would have caught it. See feedback.md.
+
+**Not verified in a real browser**: the tests confirm the tabs API is used,
+not that Firefox completes the navigation. The user was going to try it.
+
+## The 2026-08-17 profile-reset incident, for context
+
+The user hit "Restablecer Firefox" in the Troubleshoot Mode dialog while
+locked out of settings, which moved their whole profile to
+`~/Desktop/Old Firefox Data/` and dropped every extension. Their old
+Privatefox storage (`privatefoxState`, `privatefoxStats`) is intact there if
+they ever want the usage stats migrated into the new profile.
+
+They are on **Firefox Developer Edition**, install unsigned builds with
+`xpinstall.signatures.required=false`, and have **no signed .xpi** — so the
+whole policy layer is off and the extension is removable from about:addons.
+Ready-to-install artifacts are built as both `.zip` and `.xpi` in
+`extension/web-ext-artifacts/`.
 
 ## Still planned (nothing in flight)
 

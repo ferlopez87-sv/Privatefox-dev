@@ -23,6 +23,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { APP_SUPPORT_DIR } from "../src/config";
 import { installPolicy } from "../src/commands/install-policy";
+import {
+  FIREFOX_APP_CANDIDATES,
+  findFirefoxApps,
+  firefoxBinary,
+} from "../src/policy/write-policy-file";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BIN_DIR = join(APP_SUPPORT_DIR, "bin");
@@ -102,22 +107,45 @@ step("Copy signed extension .xpi", () => {
   return `${source} -> ${XPI_DEST}`;
 });
 
-step("Write policies.json into Firefox.app", () => {
+// Resolved once: both the policy write and the LaunchAgent's WatchPaths
+// have to agree on which Firefox installs exist.
+const firefoxApps = findFirefoxApps();
+
+step("Detect Firefox installs", () => {
+  if (firefoxApps.length === 0) {
+    throw new Error(
+      `none found. Looked in: ${FIREFOX_APP_CANDIDATES.join(", ")}. ` +
+        `Set PRIVATEFOX_FIREFOX_APP to the .app bundle path if yours is ` +
+        `elsewhere.`,
+    );
+  }
+  return firefoxApps.join(", ");
+});
+
+step("Write policies.json into each Firefox install", () => {
   const result = installPolicy(XPI_DEST);
   if (!result.ok) throw new Error(result.error);
   return result.detail ?? "done";
 });
 
 step("Load policy-guard LaunchAgent", () => {
+  if (firefoxApps.length === 0) {
+    throw new Error("skipped — no Firefox install to watch.");
+  }
   mkdirSync(AGENTS_DIR, { recursive: true });
   const template = readFileSync(
     join(here, "..", "launchd", `${AGENT_LABEL}.plist`),
     "utf8",
   );
   const plistPath = join(AGENTS_DIR, `${AGENT_LABEL}.plist`);
+  const watchPaths = firefoxApps
+    .map((app) => `    <string>${firefoxBinary(app)}</string>`)
+    .join("\n");
   writeFileSync(
     plistPath,
-    template.replace("__HOST_BINARY_PATH__", HOST_BINARY),
+    template
+      .replace("__HOST_BINARY_PATH__", HOST_BINARY)
+      .replace("__FIREFOX_WATCH_PATHS__", watchPaths),
   );
   // Reload if already loaded; ignore "not loaded" errors on first install.
   try {

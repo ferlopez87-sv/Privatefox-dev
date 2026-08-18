@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +6,23 @@ import {
   buildPolicies,
   EXTENSION_ID,
 } from "../src/policy/policies-template";
-import { writePolicyFile, policiesDir } from "../src/policy/write-policy-file";
+import {
+  findFirefoxApps,
+  firefoxBinary,
+  policiesDir,
+  writePolicyFile,
+  writePolicyFiles,
+} from "../src/policy/write-policy-file";
+
+/** Two fake .app bundles in a temp dir, standing in for two Firefox channels. */
+function fakeApps(...names: string[]): string[] {
+  const root = mkdtempSync(join(tmpdir(), "pf-apps-"));
+  return names.map((name) => {
+    const app = join(root, name);
+    mkdirSync(app, { recursive: true });
+    return app;
+  });
+}
 
 function extSettings(policies: { policies: Record<string, unknown> }) {
   return (
@@ -94,5 +110,69 @@ describe("write-policy-file", () => {
   it("fails clearly when Firefox is missing", () => {
     expect(() => writePolicyFile("/tmp/pf.xpi", "/nonexistent/Firefox.app"))
       .toThrow(/not found/);
+  });
+});
+
+describe("finding Firefox installs", () => {
+  afterEach(() => {
+    delete process.env["PRIVATEFOX_FIREFOX_APP"];
+  });
+
+  it("returns only the candidates that actually exist", () => {
+    const [real] = fakeApps("Firefox Developer Edition.app");
+    const found = findFirefoxApps([
+      "/nonexistent/Firefox.app",
+      real!,
+      "/nonexistent/Firefox Nightly.app",
+    ]);
+    // The release-channel path missing is exactly the case that used to
+    // disable enforcement entirely for Developer Edition users.
+    expect(found).toEqual([real]);
+  });
+
+  it("returns nothing when no candidate exists", () => {
+    expect(findFirefoxApps(["/nonexistent/Firefox.app"])).toEqual([]);
+  });
+
+  it("lets PRIVATEFOX_FIREFOX_APP override detection", () => {
+    const [listed, unlisted] = fakeApps("Firefox.app", "Custom Firefox.app");
+    process.env["PRIVATEFOX_FIREFOX_APP"] = unlisted!;
+    expect(findFirefoxApps([listed!])).toEqual([unlisted]);
+  });
+
+  it("ignores an override pointing at nothing", () => {
+    const [listed] = fakeApps("Firefox.app");
+    process.env["PRIVATEFOX_FIREFOX_APP"] = "/nonexistent/Firefox.app";
+    expect(findFirefoxApps([listed!])).toEqual([]);
+  });
+
+  it("derives the binary the LaunchAgent watches", () => {
+    expect(firefoxBinary("/Applications/Firefox Developer Edition.app")).toBe(
+      "/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox",
+    );
+  });
+});
+
+describe("writing to every detected install", () => {
+  it("writes one policies.json per Firefox install", () => {
+    const apps = fakeApps("Firefox.app", "Firefox Developer Edition.app");
+    const { written, failed } = writePolicyFiles("/tmp/pf.xpi", apps);
+    expect(failed).toEqual([]);
+    expect(written).toEqual(apps.map((a) => join(policiesDir(a), "policies.json")));
+    for (const path of written) {
+      expect(JSON.parse(readFileSync(path, "utf8")).policies.BlockAboutAddons)
+        .toBe(true);
+    }
+  });
+
+  it("keeps a partial success visible instead of failing the whole run", () => {
+    const [real] = fakeApps("Firefox.app");
+    const { written, failed } = writePolicyFiles("/tmp/pf.xpi", [
+      real!,
+      "/nonexistent/Firefox Nightly.app",
+    ]);
+    expect(written).toHaveLength(1);
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.app).toBe("/nonexistent/Firefox Nightly.app");
   });
 });

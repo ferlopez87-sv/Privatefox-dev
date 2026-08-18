@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { getManifest } from "../src/manifest";
-import { isGatedUrl, registerNavGuard } from "../src/background/nav-guard";
+import {
+  _resetRedirectingTabs,
+  isGatedUrl,
+  registerNavGuard,
+} from "../src/background/nav-guard";
 import { GATED_PAGES } from "../src/shared/constants";
 import {
   activatePanicMode,
@@ -137,6 +141,46 @@ describe("gating about:addons", () => {
     await fake._fireUpdated(8, "about:addons");
 
     expect(fake._navigations).toEqual([]);
+  });
+});
+
+describe("the full gate round trip", () => {
+  /**
+   * The sequence a user actually performs, which no single test covered
+   * before 2.1.2: hit a gated page, get sent to the gate, enter the correct
+   * password, and be forwarded to the page originally asked for. The
+   * forwarding navigation must not bounce straight back to the gate.
+   */
+  it("lets the tab through after the gate grants a pass", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+
+    await fake._fireUpdated(20, "about:addons");
+    expect(fake._navigations[0]?.url).toContain(GATE);
+    fake._navigations.length = 0;
+
+    // The gate's password submit.
+    expect(await grantSettingsPass("browsing-pw")).toBe(true);
+    // Typing a password takes longer than the redirect cooldown, so the tab
+    // is no longer suppressed by it — this is the real post-cooldown path.
+    _resetRedirectingTabs();
+
+    await fake._fireUpdated(20, "about:addons");
+
+    expect(fake._navigations).toEqual([]);
+  });
+
+  it("re-gates the same tab once the pass has expired", async () => {
+    const fake = install();
+    await completeSetup("browsing-pw");
+    await grantSettingsPass("browsing-pw");
+    const { setState } = await import("../src/shared/storage");
+    await setState({ settingsPassUntil: Date.now() - 1 });
+    _resetRedirectingTabs();
+
+    await fake._fireUpdated(21, "about:addons");
+
+    expect(fake._navigations[0]?.url).toContain(GATE);
   });
 });
 

@@ -8,6 +8,12 @@
     WatchPaths fires when the bundle changes; the guard script waits for
     Gatekeeper's first-launch validation before re-copying, then leaves a
     note that a Firefox restart is needed.
+
+    __FIREFOX_WATCH_PATHS__ is filled in by scripts/install.ts with one
+    <string> per detected Firefox install. It used to be a hardcoded
+    /Applications/Firefox.app path, which meant the guard never fired for
+    anyone on Developer Edition, Nightly or ESR — exactly the case it was
+    written to protect.
   -->
   <key>Label</key>
   <string>com.privatefox.policyguard</string>
@@ -18,7 +24,7 @@
   </array>
   <key>WatchPaths</key>
   <array>
-    <string>/Applications/Firefox.app/Contents/MacOS/firefox</string>
+__FIREFOX_WATCH_PATHS__
   </array>
   <key>ThrottleInterval</key>
   <integer>60</integer>
