@@ -12,6 +12,7 @@ import {
   revokeSettingsPass,
   setPassword,
   setSettingsPassword,
+  claimSettingsPassWithRecoveryCode,
   unlockWithEmailCode,
   unlockWithPassword,
   unlockWithRecoveryCode,
@@ -97,6 +98,18 @@ async function handle(request: RuntimeRequest): Promise<RuntimeResponse> {
         return { ok: false, error: "Invalid recovery code." };
       }
       return { ok: true, recoveryCode: newCode };
+    }
+    case "claim-settings-pass-with-recovery-code": {
+      const ok = await claimSettingsPassWithRecoveryCode(request.code);
+      if (!ok) {
+        return {
+          ok: false,
+          error:
+            "Could not open preferences. If panic mode is active, wait for " +
+            "it to end.",
+        };
+      }
+      return { ok: true, locked: (await getState()).locked };
     }
     case "set-password": {
       const result = await setPassword(

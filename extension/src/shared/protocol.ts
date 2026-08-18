@@ -35,6 +35,18 @@ export type RuntimeRequest =
    * other use of it.
    */
   | { kind: "reset-settings-password-with-recovery-code"; code: string }
+  /**
+   * Second half of that flow: opens preferences right after the reset,
+   * proving identity with the NEW recovery code the reset just returned.
+   *
+   * Split in two on purpose. The reset cannot grant the pass itself: doing
+   * so flips the options page straight to the settings, unmounting the
+   * screen that shows the new one-time recovery code before the user has
+   * read it. So the code is displayed first, and this is sent when they
+   * press "Continue to preferences". Verifies but does NOT rotate — the
+   * code was already rotated by the reset moments earlier.
+   */
+  | { kind: "claim-settings-pass-with-recovery-code"; code: string }
   | {
       kind: "set-password";
       currentPassword: string | null;

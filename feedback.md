@@ -207,6 +207,40 @@ constraint it works around applies to the rest of that file. And test the
 the redirect went, none asserted that entering the password got you to the
 page. `nav-guard.test.ts` now has that round trip.
 
+## Guessing twice at a bug the user could have pinned in one screenshot (2.1.3)
+
+The user reported "entering the settings code doesn't take me to the page".
+Two fixes were shipped against that sentence — 2.1.2's `location.replace`
+→ `tabs.update` change among them — before asking *which* of the two
+password screens they were on. A screenshot settled it immediately: it was
+the recovery success screen, and the real bug was that
+`resetSettingsPasswordWithRecoveryCode` never granted a pass, so "Continue
+to preferences" just re-rendered the gate.
+
+The `tabs.update` change was sound on its own (an extension page genuinely
+cannot `location.replace` to `about:addons`), which made it easy to believe
+it was *the* bug and stop looking.
+
+**Lesson**: when a report could describe two different code paths, find out
+which one before writing a fix — a screenshot or the exact on-screen wording
+costs one message. And when a plausible defect is found near the reported
+symptom, confirm it actually produces that symptom before shipping it as the
+fix; "this is definitely broken" is not the same as "this is what broke".
+
+## A recovery path that dead-ends is worse than none (2.1.3)
+
+Every piece of the forgot-settings-password flow worked except the last
+step, so a user who had already lost their password and burned their
+one-time recovery code landed on a screen whose only button returned them to
+the prompt they were escaping. Recovery paths are reached by people with no
+remaining options, and this one had never been walked end to end — the tests
+covered `resetSettingsPasswordWithRecoveryCode` clearing the hash, and
+stopped there.
+
+**Lesson**: test recovery flows to the point where the user is *actually
+back in*, not to the point where the credential changed. `panic.test.ts` now
+asserts `hasValidSettingsPass()` at the end of the flow.
+
 ## Practices that worked well — keep doing these- **Every shipped change bumps `extension/package.json`'s version and adds
   a `CHANGELOG.md` entry, in the same commit.** Added mid-project at the
   user's request; never skip it — the user installs `.xpi`/`.zip` files by

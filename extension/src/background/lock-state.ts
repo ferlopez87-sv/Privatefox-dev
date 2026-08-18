@@ -195,6 +195,33 @@ export async function resetSettingsPasswordWithRecoveryCode(
   return newCode;
 }
 
+/**
+ * Grants the preferences pass to someone who has just proven identity with
+ * the recovery code, without rotating it again.
+ *
+ * Exists because resetSettingsPasswordWithRecoveryCode deliberately does
+ * NOT grant the pass: the options page swaps to the settings the moment the
+ * pass is valid, which would unmount the one-time recovery code before it
+ * could be read. The reset shows the code, this opens the door, and
+ * "Continue to preferences" is what fires it — a button that previously
+ * dropped the user back on the password prompt it had just freed them from.
+ */
+export async function claimSettingsPassWithRecoveryCode(
+  code: string,
+): Promise<boolean> {
+  const state = await getState();
+  // Panic outranks proof of identity, exactly as it does in grantSettingsPass.
+  if (hasActivePanic(state)) return false;
+  if (!state.recoveryHash) return false;
+  if (!(await verifySecret(normalizeRecoveryCode(code), state.recoveryHash))) {
+    return false;
+  }
+  await setState({
+    settingsPassUntil: Date.now() + SETTINGS_PASS_TTL_MINUTES * 60_000,
+  });
+  return true;
+}
+
 /** True while a granted preferences pass is still within its TTL. */
 export async function hasValidSettingsPass(): Promise<boolean> {
   const { settingsPassUntil } = await getState();

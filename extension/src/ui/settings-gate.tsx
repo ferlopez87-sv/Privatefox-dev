@@ -45,6 +45,37 @@ function SettingsPasswordRecovery(props: { onDone: () => void }) {
         return;
       }
       if ("recoveryCode" in res) setNewRecoveryCode(res.recoveryCode);
+    } catch (err) {
+      // Without this the promise rejected silently, leaving the form exactly
+      // as it was — indistinguishable from a rejected code.
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Opens preferences using the new code, then dismisses this screen. The
+   * pass is claimed here rather than during the reset because a valid pass
+   * makes the options page render the settings immediately, which would
+   * unmount this screen before the one-time code could be read.
+   */
+  const continueToPreferences = async () => {
+    if (busy || !newRecoveryCode) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await sendToBackground({
+        kind: "claim-settings-pass-with-recovery-code",
+        code: newRecoveryCode,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      props.onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -61,7 +92,10 @@ function SettingsPasswordRecovery(props: { onDone: () => void }) {
           <strong>one time only</strong>. Store it somewhere safe.
         </p>
         <div class="code">{newRecoveryCode}</div>
-        <button onClick={props.onDone}>Continue to preferences</button>
+        <button disabled={busy} onClick={() => void continueToPreferences()}>
+          Continue to preferences
+        </button>
+        <div class="error">{error}</div>
       </main>
     );
   }
@@ -115,6 +149,10 @@ export function SettingsGate() {
       });
       if (!res.ok) setError(res.error);
       setPassword("");
+    } catch (err) {
+      // A rejected sendMessage (background page asleep, listener not yet
+      // registered) used to leave the form untouched and silent.
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }

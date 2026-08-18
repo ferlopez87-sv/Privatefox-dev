@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   activatePanicMode,
+  claimSettingsPassWithRecoveryCode,
   completeSetup,
   grantSettingsPass,
   hasActivePanic,
+  hasValidSettingsPass,
   maybeCloseIncognitoWindow,
+  resetSettingsPasswordWithRecoveryCode,
+  setSettingsPassword,
 } from "../src/background/lock-state";
 import { getState, setState } from "../src/shared/storage";
 import { makeFakeBrowser } from "./setup";
@@ -123,6 +127,54 @@ describe("panic mode closes private windows", () => {
     await maybeCloseIncognitoWindow({ id: 13, incognito: true });
 
     expect(fake._removedWindows).toEqual([]);
+  });
+});
+
+describe("forgot-settings-password recovery, end to end", () => {
+  /**
+   * Regression test for 2.1.3. The reset cleared the settings password and
+   * showed a new recovery code, but granted no pass — so "Continue to
+   * preferences" dropped the user back on the password prompt the recovery
+   * had just freed them from, with no way forward from that screen.
+   */
+  it("opens preferences after the reset, without rotating the code again", async () => {
+    const code = await completeSetup("browsing-pw");
+    // Claim a settings password, so the browsing-password fallback is gone
+    // and recovery is genuinely the only way back in.
+    expect(await setSettingsPassword("browsing-pw", "settings-pw")).toEqual({
+      ok: true,
+    });
+
+    const newCode = await resetSettingsPasswordWithRecoveryCode(code);
+    expect(newCode).not.toBeNull();
+
+    // The reset itself must NOT grant a pass: a valid pass swaps the options
+    // page to the settings and unmounts the one-time code display.
+    expect((await getState()).settingsPassUntil).toBeNull();
+    expect((await getState()).settingsPasswordHash).toBeNull();
+
+    const rotated = (await getState()).recoveryHash;
+
+    // What "Continue to preferences" now does.
+    expect(await claimSettingsPassWithRecoveryCode(newCode!)).toBe(true);
+    expect(await hasValidSettingsPass()).toBe(true);
+    // Claiming verifies but does not rotate — the code just shown stays valid.
+    expect((await getState()).recoveryHash).toEqual(rotated);
+  });
+
+  it("refuses a wrong code", async () => {
+    await completeSetup("browsing-pw");
+    expect(await claimSettingsPassWithRecoveryCode("WRONG-CODE")).toBe(false);
+    expect(await hasValidSettingsPass()).toBe(false);
+  });
+
+  it("refuses while panic mode is active, code or not", async () => {
+    const code = await completeSetup("browsing-pw");
+    const newCode = await resetSettingsPasswordWithRecoveryCode(code);
+    await activatePanicMode();
+
+    expect(await claimSettingsPassWithRecoveryCode(newCode!)).toBe(false);
+    expect(await hasValidSettingsPass()).toBe(false);
   });
 });
 

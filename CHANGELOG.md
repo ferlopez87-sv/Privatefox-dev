@@ -8,6 +8,31 @@ Firefox shows on the add-on card.
 The native host versions independently — it installs separately and only
 moves when the host itself changes.
 
+## 2.1.3
+
+### Fixed
+
+- **"Continue to preferences" led straight back to the password prompt.**
+  The forgot-settings-password recovery cleared `settingsPasswordHash` and
+  displayed the new one-time code correctly, but never granted a settings
+  pass — so the button only dismissed the screen, and the options page,
+  still seeing no valid pass, rendered the gate again. From that screen
+  there was no way forward, which is what a locked-out user reaches for
+  last.
+  - The pass is now claimed when the button is pressed, proving identity
+    with the new code the screen is displaying, via
+    `claim-settings-pass-with-recovery-code`. It verifies without rotating
+    (the reset rotated moments earlier) and refuses during panic mode.
+  - Deliberately not granted by the reset itself: a valid pass makes the
+    options page render the settings immediately, unmounting the one-time
+    recovery code before it can be read.
+
+### Changed
+
+- Both settings-gate submit handlers now catch a rejected `sendMessage`
+  and show the error. Previously a rejection left the form untouched and
+  silent — identical, on screen, to a wrong password.
+
 ## 2.1.2
 
 ### Fixed
