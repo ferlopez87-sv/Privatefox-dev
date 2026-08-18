@@ -11,7 +11,7 @@ delete the app bundle, boot another browser).
 | Bypass attempt | Blocked by |
 |---|---|
 | Browsing while locked | Content-script overlay + new-tab override |
-| Opening a private window | `DisablePrivateBrowsing` policy |
+| Opening a private window | The extension's `windows.onCreated` handler closes it unless a settings pass is valid (requires the `ExtensionSettings.<id>.private_browsing` policy key + one restart, or Firefox never reports the window). The window is visibly created and then closed — the entry point is not removed. The harder `DisablePrivateBrowsing` policy is opt-in via `buildPolicies({disablePrivateBrowsing:true})` |
 | Disabling/removing the extension in about:addons | `BlockAboutAddons` + `ExtensionSettings: force_installed` policies; with `BlockAboutAddons` off, the extension's password gate (nav-guard → `src/gate/`, 5-minute pass, revoked on lock) |
 | Waiting out the lock | Lock re-asserts on startup and after idle timeout |
 | Guessing the password | PBKDF2 (210k iterations, SHA-256, per-hash salt); only hashes stored |

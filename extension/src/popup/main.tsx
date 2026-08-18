@@ -1,5 +1,6 @@
 import { render } from "preact";
 import { usePrivatefoxState, sendToBackground } from "../ui/state";
+import { useNow } from "../ui/settings-gate";
 import "../ui/styles.css";
 
 /**
@@ -34,6 +35,11 @@ function activatePanic() {
 
 function App() {
   const state = usePrivatefoxState();
+  // Both deadlines re-render this card the moment they pass, so an open
+  // popup never keeps showing "active" for a window that already expired.
+  // Hooks must run before any early return.
+  const nowPanic = useNow(state?.panicUntil ?? null);
+  const nowPass = useNow(state?.settingsPassUntil ?? null);
   if (!state) return null;
 
   if (!state.setupComplete) {
@@ -48,6 +54,17 @@ function App() {
     );
   }
 
+  const panicActive = state.panicUntil !== null && nowPanic < state.panicUntil;
+  // A valid settings pass lifts the dynamic private-window block, so the
+  // card has to say "Allowed for now" rather than flatly "Blocked".
+  const settingsPassActive =
+    state.settingsPassUntil !== null && nowPass < state.settingsPassUntil;
+  const privateBrowsing = !state.blockPrivateBrowsing
+    ? "Allowed"
+    : settingsPassActive
+      ? "Allowed for now"
+      : "Blocked";
+
   return (
     <main class="popup">
       <h1>Privatefox Lock</h1>
@@ -56,7 +73,13 @@ function App() {
         <span class={state.locked ? "dot locked" : "dot unlocked"} />
         <div>
           <strong>{state.locked ? "Locked" : "Unlocked"}</strong>
-          <p class="hint">Protection is active on this browser.</p>
+          <p class="hint">
+            {panicActive
+              ? "Panic mode: no password opens the protected surfaces."
+              : settingsPassActive
+                ? "Settings unlocked — preferences are reachable right now."
+                : "Protection is active on this browser."}
+          </p>
         </div>
       </div>
 
@@ -67,7 +90,11 @@ function App() {
         </li>
         <li>
           <span>Private browsing</span>
-          <span>{state.blockPrivateBrowsing ? "Blocked" : "Allowed"}</span>
+          <span>{privateBrowsing}</span>
+        </li>
+        <li>
+          <span>about:addons</span>
+          <span>{state.blockAboutAddons ? "Blocked" : "Password gate"}</span>
         </li>
         <li>
           <span>Recovery email</span>
@@ -92,7 +119,8 @@ function App() {
       </div>
       <div class="row">
         <button class="panic" onClick={activatePanic}>
-          Panic mode ({state.panicUntil !== null && Date.now() < state.panicUntil ? "active" : "10 min"})
+          {/* Duration comes from the preference, not a hardcoded 10. */}
+          Panic mode ({panicActive ? "active" : `${state.panicModeMinutes} min`})
         </button>
       </div>
     </main>

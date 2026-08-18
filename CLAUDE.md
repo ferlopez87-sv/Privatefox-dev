@@ -98,10 +98,13 @@ Permissions: `storage`, `idle`, `tabs`, `webNavigation`, `nativeMessaging`. `hos
 
 **Enforcement boundary.** Content scripts cannot run on `about:addons`, `about:preferences`, or `about:debugging` — there is no technical workaround from inside the extension. This is exactly why `policies.json` (Firefox Enterprise Policies) is the real enforcement layer:
 - `ExtensionSettings.<extension-id>.installation_mode: "force_installed"` (with an `install_url`) — prevents user removal/disabling.
-- `DisablePrivateBrowsing: true` — removes Private Browsing entirely at the browser-chrome level. Conditional on the `blockPrivateBrowsing` preference.
+- `ExtensionSettings.<extension-id>.private_browsing: true` — always written. Load-bearing: without it Firefox never reports incognito windows to a WebExtension, so neither the dynamic private-window block nor private-window dwell stats can work.
+- `DisablePrivateBrowsing: true` — removes Private Browsing entirely at the browser-chrome level. **No longer written by default** (see "Dynamic private-window blocking" below); still available via `buildPolicies({disablePrivateBrowsing:true})`.
 - `BlockAboutAddons: true` — removes access to `about:addons` outright. Conditional on the `blockAboutAddons` preference (default on).
 
-Both conditional policies ride along on the `install-policy` native command; `buildPolicies` omits the key when the preference is off. Force-install is unconditional.
+`blockAboutAddons` rides along on the `install-policy` native command; `buildPolicies` omits the key when the preference is off. Force-install and `private_browsing` are unconditional.
+
+**Dynamic private-window blocking (v2.0.0).** `blockPrivateBrowsing` is enforced by the extension, not by a policy: `maybeCloseIncognitoWindow()` (`lock-state.ts`, behind `windows.onCreated`) closes any incognito window unless `hasValidSettingsPass()` — so the **settings** password, not the browsing one, is what opens private browsing, for its 5-minute pass. Panic mode still closes unconditionally, ahead of that check. Two consequences to keep in mind before "improving" this: the toggle now takes effect with no restart, but Firefox still shows the New Private Window entry point, so the window visibly flashes open and closes rather than being unavailable. The whole mechanism is inert without the `private_browsing` policy key and one restart — a WebExtension with no private-window access is never told the window exists.
 
 **Making the lock visible.** Persisting `locked: true` only draws the overlay where the content script runs (http/https/file). It cannot run on extension pages, `about:` pages, or the startup window (`about:home` is not the newtab override), so `lock()` ends by calling `surfaceLockScreen()` (`background/surface-lock.ts`), which navigates each *focused* tab that cannot host the overlay to the lock page. Runs unconditionally, so locking while already locked re-asserts a visible lock screen. **Never "fix" a missing lock screen by only writing storage** — that was the original bug.
 

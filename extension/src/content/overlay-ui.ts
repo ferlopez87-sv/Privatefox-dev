@@ -1,4 +1,5 @@
 import type { RuntimeRequest, RuntimeResponse } from "../shared/protocol";
+import { followRedirect } from "../shared/url";
 
 /**
  * Lock overlay rendered inside a closed ShadowRoot attached to a host
@@ -42,12 +43,19 @@ const CSS = `
 
 export class LockOverlay {
   private host: HTMLElement | null = null;
+  /**
+   * Kept on the instance rather than captured in the submit handler so a
+   * change to the preference reaches an overlay that is already on screen —
+   * show() is a no-op once the host exists, but it still refreshes this.
+   */
+  private postUnlockRedirectUrl = "";
 
   isShown(): boolean {
     return this.host !== null;
   }
 
-  show(welcomeMessage: string): void {
+  show(welcomeMessage: string, postUnlockRedirectUrl = ""): void {
+    this.postUnlockRedirectUrl = postUnlockRedirectUrl;
     if (this.host) return;
     const host = document.createElement("div");
     host.id = HOST_ID;
@@ -122,6 +130,12 @@ export class LockOverlay {
                 "\n\nSave it now — it will not be shown again. " +
                 "Set a new password from the extension options page.",
             );
+          } else if (followRedirect(this.postUnlockRedirectUrl, false)) {
+            // Password unlock with a start page configured: navigate this
+            // tab there. assign(), not replace(), so Back still returns to
+            // the page the browser locked on top of. The overlay goes away
+            // with the navigation; nothing left to hide.
+            return;
           }
           // Hiding happens via the storage.onChanged listener; hide
           // directly too in case this tab's script raced the change.

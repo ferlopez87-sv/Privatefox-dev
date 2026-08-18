@@ -122,9 +122,9 @@ async function handle(request: RuntimeRequest): Promise<RuntimeResponse> {
       const current = await getState();
       const result = await callNativeHost({
         command: "install-policy",
-        disablePrivateBrowsing: current.blockPrivateBrowsing,
+        disablePrivateBrowsing: false,
         blockAboutAddons: current.blockAboutAddons,
-        grantPrivateBrowsingAccess: current.grantPrivateBrowsingAccess,
+        grantPrivateBrowsingAccess: true,
       });
       if (!result.ok) return result as RuntimeResponse;
       return { ok: true, detail: result.detail ?? "Policy applied." } as RuntimeResponse;

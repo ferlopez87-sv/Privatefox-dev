@@ -35,7 +35,10 @@ function App() {
       <main class="centered">
         <h1>Privatefox is locked</h1>
         <p class="message">{state.welcomeMessage}</p>
-        <LockForm recoveryEmailConfigured={state.recoveryEmail !== ""} />
+        <LockForm
+          recoveryEmailConfigured={state.recoveryEmail !== ""}
+          postUnlockRedirectUrl={state.postUnlockRedirectUrl}
+        />
       </main>
     );
   }

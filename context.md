@@ -119,6 +119,34 @@ writing any code:
   `ExtensionSettings.<id>.private_browsing` only when
   `grantPrivateBrowsingAccess && !disablePrivateBrowsing`.
 
+## Dynamic private-window blocking (2.0.0) — code done, QA pending
+
+`implementation_plan.md` is implemented. `blockPrivateBrowsing` is now
+enforced by `maybeCloseIncognitoWindow()` behind `windows.onCreated` instead
+of the `DisablePrivateBrowsing` policy; the settings pass (not the browsing
+password) lifts it for 5 minutes. `install-policy` stopped writing
+`DisablePrivateBrowsing` and always writes
+`ExtensionSettings.<id>.private_browsing`. The
+`grantPrivateBrowsingAccess` storage field and its options toggle were
+removed (stale stored values are simply ignored — no migration).
+Native host bumped to 1.2.0. Once QA passes, `implementation_plan.md` can be
+deleted.
+
+**Outstanding — real-Mac QA, all of it blocked on "Apply policy now" plus one
+Firefox restart** (the mechanism is entirely inert without private-window
+access): private window closes instantly while blocking is on; stays open
+after entering the settings password; closes again once the pass expires;
+the visible open/close flash is tolerable in practice.
+
+## Post-unlock start page (2.1.0)
+
+`postUnlockRedirectUrl` in storage; set in Options → Protection. Applied by
+`followRedirect()` (`shared/url.ts`) on the password path only, in both
+`ui/LockForm.tsx` (lock screen, `replace`) and `content/overlay-ui.ts`
+(overlay, `assign`). Recovery/email unlocks intentionally skip it. QA on a
+real Mac: unlock from the lock screen and from the overlay, confirm only the
+active tab moves and Back behaves as described.
+
 ## Still planned (nothing in flight)
 
 - **Phase 5 — polish/packaging**: optional Node SEA packaging for the

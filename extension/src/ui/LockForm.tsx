@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { sendToBackground } from "./state";
+import { followRedirect } from "../shared/url";
 
 type Mode = "password" | "recovery" | "email";
 
@@ -8,7 +9,10 @@ type Mode = "password" | "recovery" | "email";
  * code entry, and the email-a-code flow. On recovery success the new
  * recovery code is displayed once and a password reset is required.
  */
-export function LockForm(props: { recoveryEmailConfigured: boolean }) {
+export function LockForm(props: {
+  recoveryEmailConfigured: boolean;
+  postUnlockRedirectUrl: string;
+}) {
   const [mode, setMode] = useState<Mode>("password");
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
@@ -28,6 +32,10 @@ export function LockForm(props: { recoveryEmailConfigured: boolean }) {
           password: value,
         });
         if (!res.ok) setError(res.error);
+        // Unlocked: send this tab to the configured start page, replacing
+        // the lock screen in history. Only on the password path — the two
+        // recovery paths clear the passwords and must land on the reset UI.
+        else if (followRedirect(props.postUnlockRedirectUrl, true)) return;
       } else if (mode === "recovery") {
         const res = await sendToBackground({
           kind: "recovery-attempt",

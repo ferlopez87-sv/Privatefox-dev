@@ -2,7 +2,6 @@ import type { HashedSecret } from "./crypto";
 import {
   DEFAULT_BLOCK_ABOUT_ADDONS,
   DEFAULT_BLOCK_PRIVATE_BROWSING,
-  DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS,
   DEFAULT_IDLE_TIMEOUT_MINUTES,
   DEFAULT_PANIC_MINUTES,
   DEFAULT_WELCOME_MESSAGE,
@@ -42,12 +41,18 @@ export interface PrivatefoxState {
    */
   postGateRedirectUrl: string;
   /**
-   * Force-grant this extension private-window access via the enterprise
-   * policy so usage stats also cover private windows. Only relevant if
-   * blockPrivateBrowsing is off. Enforced only once the native host has
-   * (re)written policies.json and Firefox has restarted.
+   * Where the tab goes after a correct *browsing* password unlocks the
+   * browser — a start page for the session. Applies to both unlock
+   * surfaces: the lock screen replaces itself with it, and the content
+   * overlay navigates the page it was covering. Only the tab where the
+   * password was typed moves; other tabs are left alone. Empty (the
+   * default) keeps the original behavior — the lock screen becomes a new
+   * tab, and the overlay just uncovers the page underneath.
+   *
+   * Not applied to recovery-code or emailed-code unlocks: those clear both
+   * passwords and must land on the forced-reset UI instead.
    */
-  grantPrivateBrowsingAccess: boolean;
+  postUnlockRedirectUrl: string;
   /**
    * Expiry (ms since epoch) of the pass granted by the settings password.
    * One pass covers every protected surface (Firefox preferences,
@@ -99,7 +104,7 @@ export const DEFAULT_STATE: PrivatefoxState = {
   blockPrivateBrowsing: DEFAULT_BLOCK_PRIVATE_BROWSING,
   blockAboutAddons: DEFAULT_BLOCK_ABOUT_ADDONS,
   postGateRedirectUrl: "",
-  grantPrivateBrowsingAccess: DEFAULT_GRANT_PRIVATE_BROWSING_ACCESS,
+  postUnlockRedirectUrl: "",
   settingsPassUntil: null,
   panicUntil: null,
   panicModeMinutes: DEFAULT_PANIC_MINUTES,

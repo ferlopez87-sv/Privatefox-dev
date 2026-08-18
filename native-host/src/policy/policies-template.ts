@@ -2,8 +2,12 @@ export const EXTENSION_ID = "lock@privatefox.local";
 
 export interface PolicyOptions {
   /**
-   * Include DisablePrivateBrowsing. Defaults to true. Driven by the
-   * extension's blockPrivateBrowsing preference via the install-policy command.
+   * Include DisablePrivateBrowsing. Defaults to FALSE: private browsing is
+   * now blocked dynamically by the extension (windows.onCreated closes the
+   * window unless a settings pass is valid), so the hard policy block —
+   * which needs a Firefox restart to toggle either way — is no longer how
+   * the blockPrivateBrowsing preference is enforced. Still supported for
+   * anyone who wants the harder, restart-bound block.
    */
   disablePrivateBrowsing?: boolean;
   /**
@@ -14,10 +18,12 @@ export interface PolicyOptions {
   blockAboutAddons?: boolean;
   /**
    * Grant this extension access to private/incognito windows by setting
-   * ExtensionSettings.<id>.private_browsing to true in the policy, so the
-   * usage-stats tracker can also cover private-window dwell time. Only
-   * meaningful when disablePrivateBrowsing is off — if private windows are
-   * blocked entirely there is nothing to grant access to.
+   * ExtensionSettings.<id>.private_browsing to true in the policy. Defaults
+   * to TRUE and is load-bearing: without it Firefox never hands the
+   * extension an incognito window, so neither the dynamic private-window
+   * block nor private-window dwell stats can work. Only meaningful when
+   * disablePrivateBrowsing is off — if private windows are blocked entirely
+   * there is nothing to grant access to.
    */
   grantPrivateBrowsingAccess?: boolean;
 }
@@ -26,8 +32,10 @@ export interface PolicyOptions {
  * Builds the Firefox Enterprise Policies content. This is the actual
  * enforcement layer for Privatefox:
  *  - force_installed: the extension cannot be removed or disabled by the user
- *  - DisablePrivateBrowsing: private windows are removed entirely (optional)
+ *  - private_browsing: the extension can see (and close) private windows
  *  - BlockAboutAddons: about:addons is unreachable
+ *  - DisablePrivateBrowsing: private windows removed entirely (opt-in; the
+ *    default is the extension's dynamic block instead)
  *
  * xpiPath must point at an AMO-SIGNED .xpi (Release-channel Firefox
  * enforces signatures even for force-installed extensions).
@@ -40,9 +48,9 @@ export function buildPolicies(
     throw new Error(`xpiPath must be absolute, got: ${xpiPath}`);
   }
   const {
-    disablePrivateBrowsing = true,
+    disablePrivateBrowsing = false,
     blockAboutAddons = true,
-    grantPrivateBrowsingAccess,
+    grantPrivateBrowsingAccess = true,
   } = options;
   const extensionSettings: Record<string, unknown> = {
     installation_mode: "force_installed",

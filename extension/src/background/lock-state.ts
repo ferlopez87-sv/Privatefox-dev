@@ -44,21 +44,36 @@ export async function activatePanicMode(): Promise<void> {
 }
 
 /**
- * Closes an incognito window immediately while panic mode is active; no-op
- * otherwise. Backs the windows.onCreated listener in background/index.ts,
- * kept as a small explicit function so the behavior is unit-testable.
- * Honest caveat: without private-window access granted (native host +
- * restart) Firefox never hands a WebExtension an incognito window at all,
- * so this can silently no-op — the panic UI says so rather than claiming
- * a hard block.
+ * Closes an incognito window immediately. Backs the windows.onCreated
+ * listener in background/index.ts, kept as a small explicit function so the
+ * behavior is unit-testable. Two reasons to close:
+ *  - panic mode is active — unconditional, no pass can override it;
+ *  - blockPrivateBrowsing is on and there is no valid settings pass. This is
+ *    the dynamic replacement for the DisablePrivateBrowsing enterprise
+ *    policy: the toggle now takes effect without a Firefox restart, and the
+ *    settings password (not the browsing one) is what opens private browsing
+ *    for its 5-minute window.
+ *
+ * Honest caveat: without private-window access granted (the
+ * ExtensionSettings.<id>.private_browsing policy key + a restart) Firefox
+ * never hands a WebExtension an incognito window at all, so this silently
+ * no-ops. install-policy now always writes that key for exactly this reason.
  */
 export async function maybeCloseIncognitoWindow(window: {
   incognito?: boolean;
   id?: number;
 }): Promise<void> {
   if (!window.incognito || window.id === undefined) return;
-  if (!hasActivePanic(await getState())) return;
-  await browser.windows.remove(window.id);
+  const state = await getState();
+
+  if (hasActivePanic(state)) {
+    await browser.windows.remove(window.id);
+    return;
+  }
+
+  if (state.blockPrivateBrowsing && !(await hasValidSettingsPass())) {
+    await browser.windows.remove(window.id);
+  }
 }
 
 export async function lock(): Promise<void> {

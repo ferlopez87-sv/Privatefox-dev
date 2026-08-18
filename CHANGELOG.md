@@ -8,6 +8,85 @@ Firefox shows on the add-on card.
 The native host versions independently — it installs separately and only
 moves when the host itself changes.
 
+## 2.1.1
+
+### Fixed
+
+- **The toolbar popup card now reflects the actual settings.** Three
+  separate desyncs:
+  - The panic button hardcoded "10 min" instead of reading
+    `panicModeMinutes`, so changing the duration in Options never showed up.
+  - "Private browsing: Blocked" ignored an active settings pass, which
+    (since 2.0.0) is exactly what lifts the block. It now reads "Allowed for
+    now" while a pass is valid.
+  - Panic-active and pass-active were computed from a bare `Date.now()` at
+    render time, so an open popup kept showing "active" after the deadline
+    passed. Both now go through the shared `useNow`, which re-renders the
+    card the moment each deadline expires.
+
+### Added
+
+- The popup card shows the `about:addons` protection ("Blocked" vs
+  "Password gate"), and the status line calls out panic mode or an open
+  settings pass instead of always claiming "Protection is active".
+
+## 2.1.0
+
+### Added
+
+- **Configurable start page after unlocking** (Options → Protection, "After
+  unlocking the browser, go to"). A correct browsing password sends the tab
+  the password was typed in to that address — both from the lock screen and
+  from the overlay on an already-open page. Other tabs are left where they
+  are. Blank keeps the previous behavior.
+  - The lock screen uses `location.replace`, so Back never returns to a lock
+    screen; the overlay uses `location.assign`, so Back still returns to the
+    page the browser locked on top of.
+  - Recovery-code and emailed-code unlocks deliberately do **not** redirect:
+    both clear the passwords and must land on the forced-reset UI.
+- `shared/url.ts` — `isSafeRedirectUrl` (moved out of `options/main.tsx`,
+  now shared by both redirect settings) and `followRedirect`, which
+  re-validates the stored value at navigation time rather than trusting the
+  save-time check.
+
+## 2.0.0
+
+Private browsing is now blocked by the extension, not by a Firefox
+enterprise policy. Major because the enforcement model changed: the hard
+`DisablePrivateBrowsing` block is no longer written by default.
+
+### Changed
+
+- **Dynamic private-window blocking.** With "Block private / incognito
+  windows" on, a private window is closed the instant it opens unless a
+  valid settings pass is active — so the *settings* password (not the
+  browsing one) is what opens private browsing, for its 5-minute window.
+  The toggle now takes effect immediately instead of only after a Firefox
+  restart.
+- **`install-policy` no longer writes `DisablePrivateBrowsing`** and always
+  writes `ExtensionSettings.<id>.private_browsing: true`. That key is
+  load-bearing: without private-window access Firefox never tells the
+  extension a private window opened, so nothing could close it. Applying
+  the policy and restarting Firefox once is required after upgrading.
+- **Trade-off, stated plainly:** Firefox still shows the "New Private
+  Window" menu item and honors ⌘⇧P, so the window visibly flashes open and
+  closes, where the old policy removed the entry point outright. The
+  restart-bound hard block is still available in `buildPolicies` via
+  `disablePrivateBrowsing: true` for anyone who prefers it.
+
+### Removed
+
+- **The "Grant private-window access for stats" toggle** and its
+  `grantPrivateBrowsingAccess` storage field. The access it controlled is
+  now unconditional, since the private-window block depends on it. An
+  existing stored value is simply ignored — no migration needed.
+
+## Native host 1.2.0
+
+- `buildPolicies` defaults flipped: `disablePrivateBrowsing` false,
+  `grantPrivateBrowsingAccess` true. The CLI installer
+  (`npm run install-host`) picks these up with no argument changes.
+
 ## 1.8.1
 
 ### Fixed

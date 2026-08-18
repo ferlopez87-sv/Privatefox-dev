@@ -116,13 +116,65 @@ describe("panic mode closes private windows", () => {
   it("does nothing once the panic window has passed", async () => {
     await completeSetup("browsing-pw");
     await activatePanicMode();
-    const state = await getState();
+    // Backdate the deadline rather than faking the clock — fake timers
+    // deadlock the harness's real-timer flush (see feedback.md).
+    await setState({ panicUntil: Date.now() - 1, blockPrivateBrowsing: false });
 
-    vi.useFakeTimers();
-    vi.setSystemTime((state.panicUntil ?? 0) + 1);
     await maybeCloseIncognitoWindow({ id: 13, incognito: true });
-    vi.useRealTimers();
 
     expect(fake._removedWindows).toEqual([]);
+  });
+});
+
+describe("dynamic private-window blocking", () => {
+  it("closes a private window while blockPrivateBrowsing is on", async () => {
+    await completeSetup("browsing-pw");
+    await setState({ blockPrivateBrowsing: true });
+
+    await maybeCloseIncognitoWindow({ id: 20, incognito: true });
+
+    expect(fake._removedWindows).toEqual([20]);
+  });
+
+  it("leaves it open while a settings pass is valid", async () => {
+    await completeSetup("browsing-pw");
+    await setState({ blockPrivateBrowsing: true });
+    // No settings password set yet, so the browsing password is the fallback.
+    expect(await grantSettingsPass("browsing-pw")).toBe(true);
+
+    await maybeCloseIncognitoWindow({ id: 21, incognito: true });
+
+    expect(fake._removedWindows).toEqual([]);
+  });
+
+  it("closes it again once the settings pass has expired", async () => {
+    await completeSetup("browsing-pw");
+    await setState({ blockPrivateBrowsing: true });
+    await grantSettingsPass("browsing-pw");
+    await setState({ settingsPassUntil: Date.now() - 1 });
+
+    await maybeCloseIncognitoWindow({ id: 22, incognito: true });
+
+    expect(fake._removedWindows).toEqual([22]);
+  });
+
+  it("leaves private windows alone when blockPrivateBrowsing is off", async () => {
+    await completeSetup("browsing-pw");
+    await setState({ blockPrivateBrowsing: false });
+
+    await maybeCloseIncognitoWindow({ id: 23, incognito: true });
+
+    expect(fake._removedWindows).toEqual([]);
+  });
+
+  it("closes during panic even with a settings pass and blocking off", async () => {
+    await completeSetup("browsing-pw");
+    await setState({ blockPrivateBrowsing: false });
+    await grantSettingsPass("browsing-pw");
+    await activatePanicMode();
+
+    await maybeCloseIncognitoWindow({ id: 24, incognito: true });
+
+    expect(fake._removedWindows).toEqual([24]);
   });
 });

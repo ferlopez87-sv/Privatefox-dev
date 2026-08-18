@@ -3,6 +3,7 @@ import { useEffect, useState } from "preact/hooks";
 import { usePrivatefoxState, sendToBackground } from "../ui/state";
 import { SettingsGate, useNow } from "../ui/settings-gate";
 import { setState as patchState } from "../shared/storage";
+import { isSafeRedirectUrl } from "../shared/url";
 import {
   MAX_PANIC_MINUTES,
   MIN_PANIC_MINUTES,
@@ -96,23 +97,18 @@ function GeneralSettings(props: {
   );
 }
 
-/** Rejects only schemes that could do something surprising once landed on. */
-function isSafeRedirectUrl(url: string): boolean {
-  const trimmed = url.trim().toLowerCase();
-  return !trimmed.startsWith("javascript:") && !trimmed.startsWith("data:");
-}
-
 function ProtectionSettings(props: {
   blockPrivateBrowsing: boolean;
   blockAboutAddons: boolean;
-  grantPrivateBrowsingAccess: boolean;
   postGateRedirectUrl: string;
+  postUnlockRedirectUrl: string;
 }) {
   const [blocked, setBlocked] = useState(props.blockPrivateBrowsing);
   const [addonsBlocked, setAddonsBlocked] = useState(props.blockAboutAddons);
-  const [grantAccess, setGrantAccess] = useState(props.grantPrivateBrowsingAccess);
   const [redirectUrl, setRedirectUrl] = useState(props.postGateRedirectUrl);
   const [redirectError, setRedirectError] = useState("");
+  const [unlockUrl, setUnlockUrl] = useState(props.postUnlockRedirectUrl);
+  const [unlockError, setUnlockError] = useState("");
   const [policyResult, setPolicyResult] = useState("");
   const [status, setStatus] = useState("");
 
@@ -125,12 +121,12 @@ function ProtectionSettings(props: {
     [props.blockAboutAddons],
   );
   useEffect(
-    () => setGrantAccess(props.grantPrivateBrowsingAccess),
-    [props.grantPrivateBrowsingAccess],
-  );
-  useEffect(
     () => setRedirectUrl(props.postGateRedirectUrl),
     [props.postGateRedirectUrl],
+  );
+  useEffect(
+    () => setUnlockUrl(props.postUnlockRedirectUrl),
+    [props.postUnlockRedirectUrl],
   );
 
   const saved = () => {
@@ -146,6 +142,17 @@ function ProtectionSettings(props: {
     }
     setRedirectError("");
     await patchState({ postGateRedirectUrl: trimmed });
+    saved();
+  };
+
+  const saveUnlockUrl = async () => {
+    const trimmed = unlockUrl.trim();
+    if (trimmed && !isSafeRedirectUrl(trimmed)) {
+      setUnlockError("That URL scheme isn't allowed.");
+      return;
+    }
+    setUnlockError("");
+    await patchState({ postUnlockRedirectUrl: trimmed });
     saved();
   };
 
@@ -176,10 +183,13 @@ function ProtectionSettings(props: {
         <span>Block private / incognito windows</span>
       </label>
       <p class="hint">
-        Enforced by Firefox enterprise policies, not the extension itself.
-        Applies after the Privatefox native host is installed and Firefox is
-        restarted (see docs/SETUP.md). Until then this only records your
-        preference.
+        On: a private window closes the instant it opens, unless you have
+        entered the settings password ({SETTINGS_PASS_TTL_MINUTES}-minute
+        access). Firefox still shows the menu item and the ⌘⇧P shortcut, so
+        you will see the window flash open and disappear. Takes effect
+        immediately — no restart needed to toggle it. Requires the native host
+        installed and one Firefox restart, since without private-window access
+        Firefox never tells the extension the window opened at all.
       </p>
 
       <label class="toggle">
@@ -202,26 +212,30 @@ function ProtectionSettings(props: {
         The password gate works today, with or without the native host.
       </p>
 
-      <label class="toggle">
-        <input
-          type="checkbox"
-          checked={grantAccess}
-          disabled={blocked}
-          onChange={(e) => {
-            const value = (e.target as HTMLInputElement).checked;
-            setGrantAccess(value);
-            void patchState({ grantPrivateBrowsingAccess: value }).then(saved);
-          }}
-        />
-        <span>Grant private-window access for stats</span>
-      </label>
-      <p class="hint">
-        Lets Privatefox track time spent in private windows for usage
-        statistics. Only takes effect when private browsing is not blocked,
-        the native host is installed, and Firefox is restarted.
-      </p>
 
-      <label>After entering the settings password, go to</label>
+      <label>After unlocking the browser, go to</label>
+      <input
+        type="text"
+        placeholder="Leave blank to stay where you were (e.g. https://example.com)"
+        value={unlockUrl}
+        onInput={(e) => setUnlockUrl((e.target as HTMLInputElement).value)}
+      />
+      <p class="hint">
+        Your start page for the session. After the browsing password unlocks
+        Firefox, the tab you typed it in goes here — whether that was the lock
+        screen or the overlay on a page you already had open. Other tabs stay
+        where they are. Blank means the old behavior: the lock screen becomes
+        a new tab, and the overlay just uncovers the page underneath. Recovery
+        codes are unaffected, since those force a password reset.
+      </p>
+      <div class="error">{unlockError}</div>
+      <button class="secondary" onClick={() => void saveUnlockUrl()}>
+        Save unlock redirect
+      </button>
+
+      <label style="margin-top: 1.25rem">
+        After entering the settings password, go to
+      </label>
       <input
         type="text"
         placeholder="Leave blank to open the requested page (e.g. about:addons)"
@@ -658,8 +672,8 @@ function App() {
             <ProtectionSettings
               blockPrivateBrowsing={state.blockPrivateBrowsing}
               blockAboutAddons={state.blockAboutAddons}
-              grantPrivateBrowsingAccess={state.grantPrivateBrowsingAccess}
               postGateRedirectUrl={state.postGateRedirectUrl}
+              postUnlockRedirectUrl={state.postUnlockRedirectUrl}
             />
             <div class="panic-box">
               <PanicSettings

@@ -104,7 +104,8 @@ export function StatsTab() {
 
       <p class="hint" style="margin-top: 1.5rem">
         Private-window tracking takes effect after the native host is
-        installed, grantPrivateBrowsingAccess is on, and Firefox restarts.
+        installed and Firefox restarts — the policy that grants private-window
+        access is written automatically by "Apply policy now".
       </p>
     </section>
   );

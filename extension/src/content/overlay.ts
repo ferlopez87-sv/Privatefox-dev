@@ -12,7 +12,7 @@ const overlay = new LockOverlay();
 
 function apply(state: PrivatefoxState): void {
   if (state.setupComplete && state.locked) {
-    overlay.show(state.welcomeMessage);
+    overlay.show(state.welcomeMessage, state.postUnlockRedirectUrl);
   } else {
     overlay.hide();
   }

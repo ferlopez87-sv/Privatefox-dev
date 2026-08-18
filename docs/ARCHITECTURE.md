@@ -96,22 +96,28 @@ the guard then lets the navigation through until it expires. Properties:
     "ExtensionSettings": { "lock@privatefox.local": {
         "installation_mode": "force_installed",
         "install_url": "file://…/privatefox-lock.xpi",
-        "updates_disabled": true } },
-    "DisablePrivateBrowsing": true,
+        "updates_disabled": true,
+        "private_browsing": true } },
     "BlockAboutAddons": true } }
 ```
 
-written to `Firefox.app/Contents/Resources/distribution/policies.json`.
-`DisablePrivateBrowsing` and `BlockAboutAddons` are both conditional: the
-extension's `blockPrivateBrowsing` / `blockAboutAddons` preferences (Options →
-Protection) ride along on the `install-policy` native command, and
-`buildPolicies` omits each key when it is off. The force-install is always
-present. A third conditional key, `ExtensionSettings.<id>.private_browsing`
-(verified against Mozilla admin docs; Firefox 136+ / ESR 128.8+), is emitted
-when `grantPrivateBrowsingAccess` is on and private browsing is not blocked —
-it grants the extension access to private windows so the stats dashboard can
-also cover them, without the user manually toggling "Run in Private Windows"
-in about:addons. No manifest `"incognito"` field is required: Firefox's
+written to `Firefox.app/Contents/Resources/distribution/policies.json`. The
+force-install is always present. `BlockAboutAddons` is conditional on the
+extension's `blockAboutAddons` preference (Options → Protection), which rides
+along on the `install-policy` native command; `buildPolicies` omits the key
+when it is off.
+
+`ExtensionSettings.<id>.private_browsing` (verified against Mozilla admin
+docs; Firefox 136+ / ESR 128.8+) is now written unconditionally, because two
+features depend on the extension being able to see private windows at all:
+the dynamic private-window block (`maybeCloseIncognitoWindow`) and
+private-window dwell stats. `DisablePrivateBrowsing` is **not** written by
+default — the `blockPrivateBrowsing` preference is enforced dynamically by the
+extension instead, so it takes effect without a restart and can be lifted for
+5 minutes by the settings password. Passing `disablePrivateBrowsing: true` to
+`buildPolicies` restores the hard, restart-bound block (and then
+`private_browsing` is omitted, since there is nothing to grant access to).
+No manifest `"incognito"` field is required: Firefox's
 default is `"spanning"`, and events from private windows arrive once access
 is granted ("split" is unsupported; "not_allowed" would hide them entirely).
 Turning `blockAboutAddons` off trades the hard block for the
